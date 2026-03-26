@@ -1,6 +1,7 @@
 import type {
   AggregateScores,
   DimensionKey,
+  FirmType,
   MultiSelectToolOption,
   ReadinessBand,
   RoleLevel,
@@ -8,6 +9,12 @@ import type {
 } from "../types/assessment.js";
 
 export const ROLE_LEVELS: RoleLevel[] = ["c-suite", "manager", "ic"];
+export const FIRM_TYPES: FirmType[] = [
+  "financial-services",
+  "healthcare",
+  "consulting-firms",
+  "smes"
+];
 
 export const SINGLE_CHOICE_OPTIONS: SingleChoiceOption[] = ["A", "B", "C", "D"];
 
@@ -19,6 +26,14 @@ export const SINGLE_CHOICE_SCORES: Record<SingleChoiceOption, number> = {
 };
 
 export const MULTI_SELECT_TOOL_OPTIONS: MultiSelectToolOption[] = [
+  "option-1",
+  "option-2",
+  "option-3",
+  "option-4",
+  "option-5",
+  "option-6",
+  "option-7",
+  "option-8",
   "generative-ai-document-drafting",
   "ai-assisted-data-analysis",
   "automated-customer-communication",
@@ -59,9 +74,9 @@ export const QUESTION_DIMENSIONS: Record<number, DimensionKey> = {
 export const DIMENSION_LABELS: Record<DimensionKey, string> = {
   aiLiteracy: "AI Awareness & Literacy",
   dataReadiness: "Data Infrastructure & Readiness",
-  aiStrategy: "AI Strategy & Leadership",
-  workflowAdoption: "Workflow Integration & Adoption",
-  ethicsCompliance: "Ethics, Risk & Compliance"
+  aiStrategy: "Process Integration Capability",
+  workflowAdoption: "Leadership & Strategic Alignment",
+  ethicsCompliance: "Risk, Ethics & Governance Readiness"
 };
 
 export const TOTAL_QUESTIONS = 25;
@@ -84,48 +99,43 @@ export const ZERO_AGGREGATE_SCORES: AggregateScores = {
 export const READINESS_BANDS: ReadinessBand[] = [
   {
     min: 0,
-    max: 30,
-    label: "Low",
-    description: "Significant foundational gaps across most dimensions."
-  },
-  {
-    min: 31,
-    max: 54,
-    label: "Developing",
+    max: 25,
+    label: "AI Unaware",
     description:
-      "Awareness exists but capability is inconsistent and untrained."
+      "[Organisation Name]'s current AI readiness score indicates that the organisation faces significant competitive and operational exposure from its current AI capability position. The gaps identified across all five dimensions suggest that AI adoption without structured capability development is likely to produce disappointing results - and that the cost of inaction is accumulating daily. The good news: organisations starting from this position that commit to structured development consistently achieve the most dramatic improvements in the shortest timeframe."
   },
   {
-    min: 55,
-    max: 74,
-    label: "Moderate",
-    description: "Functional AI readiness with clear upskilling opportunities."
-  },
-  {
-    min: 75,
-    max: 89,
-    label: "Advanced",
+    min: 26,
+    max: 50,
+    label: "AI Exploring",
     description:
-      "Strong capability; focus on strategic integration and governance."
+      "[Organisation Name] has foundational AI awareness and some promising early adoption but lacks the systematic capability infrastructure to extract consistent value from AI investment. The diagnostic has identified specific, addressable gaps that - if closed in the right sequence - will produce measurable competitive improvement within 60-90 days."
   },
   {
-    min: 90,
+    min: 51,
+    max: 75,
+    label: "AI Developing",
+    description:
+      "[Organisation Name] has meaningful AI capability in specific areas and a leadership team that understands the strategic importance of AI readiness. The diagnostic has identified targeted gaps - primarily in governance, measurement, and systematic adoption - that are preventing the organisation from realising the full value of its existing AI investment."
+  },
+  {
+    min: 76,
     max: 100,
-    label: "Leading",
+    label: "AI Proficient",
     description:
-      "Benchmark-level readiness; focus on competitive differentiation."
+      "[Organisation Name] demonstrates strong AI readiness across most dimensions. The diagnostic has identified specific advanced capability gaps that - if addressed - will move the organisation from AI proficiency to AI leadership in its sector. At this level, the focus shifts from building foundational capability to building competitive differentiation through AI."
   }
 ];
 
 export const DIMENSION_RECOMMENDATIONS: Record<DimensionKey, string> = {
   aiLiteracy:
-    "Run role-based AI literacy training with practical evaluation exercises for frontline staff and managers.",
+    "Run role-based AI literacy development that helps staff understand tool use, output quality, and safe escalation or override decisions.",
   dataReadiness:
-    "Formalise data quality, governance, and cross-functional access patterns before scaling AI workflows.",
+    "Strengthen data quality, governance, interoperability, and practical analytics capability before scaling AI deeper into operations.",
   aiStrategy:
-    "Assign executive ownership, define funded use cases, and track AI progress on a leadership cadence.",
+    "Identify the highest-value processes for AI integration, formalise workflow redesign, and measure outcomes from each deployment.",
   workflowAdoption:
-    "Pair tooling rollouts with change management, champions, and productivity metrics that show impact.",
+    "Anchor AI adoption in leadership behaviour, documented strategy, budget commitment, and a clear competitive capability roadmap.",
   ethicsCompliance:
-    "Operationalise responsible AI controls with documented review paths, bias checks, and regulator-ready audit trails."
+    "Operationalise responsible AI controls with documented risk review paths, bias and incident checks, staff training, and stakeholder-ready transparency."
 };

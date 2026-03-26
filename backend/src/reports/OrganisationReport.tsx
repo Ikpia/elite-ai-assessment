@@ -360,10 +360,11 @@ export function OrganisationReport({
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Executive Summary</Text>
           <Text style={styles.paragraph}>
-            {data.orgName} currently scores {data.aggregatedScores.total}/100, which places
-            the organisation in the {data.readinessLevel.toLowerCase()} readiness band.
-            {` ${data.readinessDescription}`} The strongest observed dimension is{" "}
-            {data.strongestDimension.label} at {data.strongestDimension.score}/20.
+            {data.readinessDescription}
+          </Text>
+          <Text style={styles.paragraph}>
+            The strongest observed dimension is {data.strongestDimension.label} at{" "}
+            {data.strongestDimension.score}/20.
           </Text>
         </View>
 

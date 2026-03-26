@@ -1,4 +1,9 @@
 export type RoleLevel = "c-suite" | "manager" | "ic";
+export type FirmType =
+  | "financial-services"
+  | "healthcare"
+  | "consulting-firms"
+  | "smes";
 
 export type OrganisationStatus = "collecting" | "ready" | "approved" | "sent";
 
@@ -8,6 +13,7 @@ export interface SubmissionAnswer {
 }
 
 export interface SubmissionDraft {
+  firmType: FirmType | "";
   orgName: string;
   email: string;
   name: string;
@@ -17,6 +23,7 @@ export interface SubmissionDraft {
 }
 
 export interface AssessmentSubmissionPayload {
+  firmType: FirmType;
   orgName: string;
   respondentEmail: string;
   respondentName: string;
@@ -46,6 +53,7 @@ export interface AggregateScores {
 export interface Organisation {
   id: string;
   organisationKey: string;
+  firmType: FirmType;
   orgName: string;
   directorEmail: string | null;
   expectedRespondents: number | null;
@@ -60,6 +68,7 @@ export interface Organisation {
 export interface OrganisationStatusResponse {
   organisationId: string;
   organisationKey: string;
+  firmType: FirmType;
   orgName: string;
   directorEmail: string | null;
   expectedRespondents: number | null;

@@ -1,14 +1,20 @@
 import { model, Schema, type Document } from "mongoose";
 
-import { ROLE_LEVELS, SINGLE_CHOICE_OPTIONS } from "../constants/assessment.js";
+import {
+  FIRM_TYPES,
+  ROLE_LEVELS,
+  SINGLE_CHOICE_OPTIONS
+} from "../constants/assessment.js";
 import type {
   DimensionScores,
+  FirmType,
   RoleLevel,
   ScoredAnswerRecord
 } from "../types/assessment.js";
 
 export interface SubmissionDocument extends Document {
   orgDomain: string;
+  firmType: FirmType;
   orgName: string;
   respondentEmailDomain: string;
   respondentEmail: string;
@@ -58,6 +64,11 @@ const dimensionScoresSchema = new Schema<DimensionScores>(
 const submissionSchema = new Schema<SubmissionDocument>(
   {
     orgDomain: { type: String, required: true, index: true, lowercase: true },
+    firmType: {
+      type: String,
+      enum: FIRM_TYPES,
+      required: true
+    },
     orgName: { type: String, required: true, trim: true },
     respondentEmailDomain: {
       type: String,

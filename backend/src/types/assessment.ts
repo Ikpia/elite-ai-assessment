@@ -1,4 +1,9 @@
 export type RoleLevel = "c-suite" | "manager" | "ic";
+export type FirmType =
+  | "financial-services"
+  | "healthcare"
+  | "consulting-firms"
+  | "smes";
 
 export type OrganisationStatus = "collecting" | "ready" | "approved" | "sent";
 
@@ -12,6 +17,14 @@ export type DimensionKey =
 export type SingleChoiceOption = "A" | "B" | "C" | "D";
 
 export type MultiSelectToolOption =
+  | "option-1"
+  | "option-2"
+  | "option-3"
+  | "option-4"
+  | "option-5"
+  | "option-6"
+  | "option-7"
+  | "option-8"
   | "generative-ai-document-drafting"
   | "ai-assisted-data-analysis"
   | "automated-customer-communication"
@@ -21,11 +34,10 @@ export type MultiSelectToolOption =
   | "none-of-the-above";
 
 export type ReadinessLevel =
-  | "Low"
-  | "Developing"
-  | "Moderate"
-  | "Advanced"
-  | "Leading";
+  | "AI Unaware"
+  | "AI Exploring"
+  | "AI Developing"
+  | "AI Proficient";
 
 export interface DimensionScores {
   aiLiteracy: number;
@@ -41,7 +53,7 @@ export interface AggregateScores extends DimensionScores {
 
 export interface AssessmentAnswerInput {
   questionId: number;
-  value: SingleChoiceOption | MultiSelectToolOption[];
+  value: string | string[];
 }
 
 export interface ScoredAnswerRecord {
@@ -59,6 +71,7 @@ export interface ScoredAssessment {
 }
 
 export interface SubmissionPayload {
+  firmType: FirmType;
   orgName: string;
   respondentEmail: string;
   respondentName: string;
@@ -86,6 +99,7 @@ export interface ReportData {
   organisationId: string;
   orgName: string;
   organisationKey: string;
+  firmType: FirmType;
   directorEmail: string | null;
   status: OrganisationStatus;
   submittedRespondents: number;
@@ -105,6 +119,7 @@ export interface ReportData {
 export interface OrganisationDashboardItem {
   id: string;
   organisationKey: string;
+  firmType: FirmType;
   orgName: string;
   directorEmail: string | null;
   expectedRespondents: number | null;

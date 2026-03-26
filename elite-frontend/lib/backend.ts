@@ -38,6 +38,7 @@ export interface AssessmentSubmitResponse {
   submissionId: string;
   organisationId: string;
   organisationKey: string;
+  firmType: Organisation['firmType'];
   respondentScore: {
     totalScore: number;
     dimensionScores: {

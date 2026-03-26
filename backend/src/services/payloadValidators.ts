@@ -1,6 +1,7 @@
-import { ROLE_LEVELS } from "../constants/assessment.js";
+import { FIRM_TYPES, ROLE_LEVELS } from "../constants/assessment.js";
 import type {
   AssessmentAnswerInput,
+  FirmType,
   RoleLevel,
   SubmissionPayload
 } from "../types/assessment.js";
@@ -31,6 +32,17 @@ function parseRole(value: unknown): RoleLevel {
   }
 
   return value as RoleLevel;
+}
+
+function parseFirmType(value: unknown): FirmType {
+  if (typeof value !== "string" || !FIRM_TYPES.includes(value as FirmType)) {
+    throw new HttpError(
+      400,
+      `firmType must be one of: ${FIRM_TYPES.join(", ")}.`
+    );
+  }
+
+  return value as FirmType;
 }
 
 function parseAnswers(value: unknown): AssessmentAnswerInput[] {
@@ -82,6 +94,10 @@ export function parseSubmissionPayload(body: unknown): SubmissionPayload {
   }
 
   return {
+    firmType:
+      payload.firmType === undefined
+        ? "financial-services"
+        : parseFirmType(payload.firmType),
     orgName: requireString(payload.orgName, "orgName"),
     respondentEmail: requireString(payload.respondentEmail, "respondentEmail"),
     respondentName: requireString(payload.respondentName, "respondentName"),

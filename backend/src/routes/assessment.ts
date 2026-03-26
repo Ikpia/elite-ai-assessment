@@ -53,10 +53,15 @@ assessmentRouter.post(
     const organisationKey = buildOrganisationKey(normalizedOrgName);
     const respondentEmailDomain = extractEmailDomain(emailValidation.normalizedEmail);
 
-    await ensureOrganisationExists(organisationKey, normalizedOrgName);
+    await ensureOrganisationExists(
+      organisationKey,
+      normalizedOrgName,
+      payload.firmType
+    );
 
     const submission = await SubmissionModel.create({
       orgDomain: organisationKey,
+      firmType: payload.firmType,
       orgName: normalizedOrgName,
       respondentEmailDomain,
       respondentEmail: emailValidation.normalizedEmail,
@@ -77,6 +82,7 @@ assessmentRouter.post(
       submissionId: submission.id,
       organisationId: organisation.organisationId,
       organisationKey: organisation.organisationKey,
+      firmType: organisation.firmType,
       respondentScore: {
         totalScore: scoredAssessment.totalScore,
         dimensionScores: scoredAssessment.dimensionScores,

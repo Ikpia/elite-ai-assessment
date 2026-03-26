@@ -1,13 +1,18 @@
 import { model, Schema, type Document } from "mongoose";
 
-import { ZERO_AGGREGATE_SCORES } from "../constants/assessment.js";
+import {
+  FIRM_TYPES,
+  ZERO_AGGREGATE_SCORES
+} from "../constants/assessment.js";
 import type {
   AggregateScores,
+  FirmType,
   OrganisationStatus
 } from "../types/assessment.js";
 
 export interface OrganisationDocument extends Document {
   domain: string;
+  firmType: FirmType;
   orgName: string;
   directorEmail: string | null;
   expectedRespondents: number | null;
@@ -41,6 +46,11 @@ const organisationSchema = new Schema<OrganisationDocument>(
       index: true,
       trim: true,
       lowercase: true
+    },
+    firmType: {
+      type: String,
+      enum: FIRM_TYPES,
+      required: true
     },
     orgName: { type: String, required: true, trim: true },
     directorEmail: {

@@ -160,8 +160,8 @@ export const PerformanceMetricDiagram: React.FC = () => {
 
   const data = {
     gap: { current: 31, benchmark: 68, currentLabel: 'Regional Avg', benchmarkLabel: 'UK Benchmark' },
-    moderate: { current: 54, benchmark: 55, currentLabel: 'Developing Ceiling', benchmarkLabel: 'Moderate Floor' },
-    leading: { current: 75, benchmark: 90, currentLabel: 'Advanced Floor', benchmarkLabel: 'Leading Floor' }
+    moderate: { current: 50, benchmark: 51, currentLabel: 'AI Exploring Ceiling', benchmarkLabel: 'AI Developing Floor' },
+    leading: { current: 75, benchmark: 76, currentLabel: 'AI Developing Ceiling', benchmarkLabel: 'AI Proficient Floor' }
   };
 
   const currentData = data[scenario];
@@ -174,13 +174,13 @@ export const PerformanceMetricDiagram: React.FC = () => {
       <div className="flex-1 min-w-[240px]">
         <h3 className="font-serif text-xl mb-2 text-nobel-gold">Readiness Benchmark Framing</h3>
         <p className="text-blue-100/70 text-sm mb-4 leading-relaxed">
-          The final executive report uses benchmark context to show where an organisation sits today, what “moderate” readiness looks like, and what benchmark-level capability demands.
+          The final executive report uses benchmark context to show where an organisation sits today, where AI developing begins, and what AI proficient capability demands.
         </p>
         <div className="flex gap-2 mt-6">
           {[
             { key: 'gap', label: 'Current Gap' },
-            { key: 'moderate', label: 'Moderate Target' },
-            { key: 'leading', label: 'Leading Band' }
+            { key: 'moderate', label: 'AI Developing Threshold' },
+            { key: 'leading', label: 'AI Proficient Threshold' }
           ].map(item => (
             <button
               key={item.key}

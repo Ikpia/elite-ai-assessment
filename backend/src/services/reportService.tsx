@@ -55,7 +55,7 @@ export async function buildReportData(orgId: string): Promise<ReportData> {
   const readinessLevel = getReadinessLevel(organisation.aggregatedScores.total);
   const readinessDescription = getReadinessDescription(
     organisation.aggregatedScores.total
-  );
+  ).replace(/\[Organisation Name\]/g, organisation.orgName);
   const dimensionInsights = buildDimensionInsights(organisation.aggregatedScores);
   const strongestDimension = [...dimensionInsights].sort(
     (left, right) => right.score - left.score
@@ -68,6 +68,7 @@ export async function buildReportData(orgId: string): Promise<ReportData> {
     organisationId: organisation.id,
     orgName: organisation.orgName,
     organisationKey: organisation.domain,
+    firmType: organisation.firmType || "financial-services",
     directorEmail: organisation.directorEmail,
     status: organisation.status,
     submittedRespondents,

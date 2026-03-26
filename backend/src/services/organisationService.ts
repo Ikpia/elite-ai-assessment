@@ -3,6 +3,7 @@ import { SubmissionModel } from "../models/submission.js";
 import { ZERO_AGGREGATE_SCORES } from "../constants/assessment.js";
 import type {
   AggregateScores,
+  FirmType,
   OrganisationDashboardItem,
   OrganisationStatus
 } from "../types/assessment.js";
@@ -113,6 +114,7 @@ function toDashboardItem(
   organisation: {
     _id: unknown;
     domain: string;
+    firmType?: FirmType;
     orgName: string;
     directorEmail: string | null;
     expectedRespondents: number | null;
@@ -127,6 +129,7 @@ function toDashboardItem(
   return {
     id: String(organisation._id),
     organisationKey: organisation.domain,
+    firmType: organisation.firmType || "financial-services",
     orgName: organisation.orgName,
     directorEmail: organisation.directorEmail,
     expectedRespondents: organisation.expectedRespondents,
@@ -143,13 +146,27 @@ function toDashboardItem(
 
 export async function ensureOrganisationExists(
   organisationKey: string,
-  orgName: string
+  orgName: string,
+  firmType: FirmType
 ): Promise<void> {
+  const existingOrganisation = await OrganisationModel.findOne({ domain: organisationKey });
+
+  if (existingOrganisation && !existingOrganisation.firmType) {
+    existingOrganisation.firmType = firmType;
+    await existingOrganisation.save();
+  } else if (existingOrganisation && existingOrganisation.firmType !== firmType) {
+    throw new HttpError(
+      409,
+      `This organisation is already linked to the ${existingOrganisation.firmType} questionnaire.`
+    );
+  }
+
   await OrganisationModel.findOneAndUpdate(
     { domain: organisationKey },
     {
       $setOnInsert: {
         domain: organisationKey,
+        firmType,
         status: "collecting",
         aggregatedScores: { ...ZERO_AGGREGATE_SCORES }
       },
@@ -169,6 +186,7 @@ export async function refreshOrganisationAggregation(
 ): Promise<{
   organisationId: string;
   organisationKey: string;
+  firmType: FirmType;
   orgName: string;
   status: OrganisationStatus;
   aggregatedScores: AggregateScores;
@@ -195,6 +213,7 @@ export async function refreshOrganisationAggregation(
   return {
     organisationId: organisation.id,
     organisationKey: organisation.domain,
+    firmType: organisation.firmType || "financial-services",
     orgName: organisation.orgName,
     status: organisation.status,
     aggregatedScores: organisation.aggregatedScores,
@@ -206,6 +225,7 @@ export async function refreshOrganisationAggregation(
 export async function getOrganisationStatusById(orgId: string): Promise<{
   organisationId: string;
   organisationKey: string;
+  firmType: FirmType;
   orgName: string;
   directorEmail: string | null;
   expectedRespondents: number | null;
@@ -227,6 +247,7 @@ export async function getOrganisationStatusById(orgId: string): Promise<{
   return {
     organisationId: organisation.id,
     organisationKey: organisation.domain,
+    firmType: organisation.firmType || "financial-services",
     orgName: organisation.orgName,
     directorEmail: organisation.directorEmail,
     expectedRespondents: organisation.expectedRespondents,
