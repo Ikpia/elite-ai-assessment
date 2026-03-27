@@ -16,13 +16,13 @@ export const dynamic = "force-dynamic";
 
 export async function PATCH(
   request: Request,
-  context: { params: Promise<{ orgId: string }> | { orgId: string } }
+  context: { params: Promise<{ orgId: string }> }
 ) {
   try {
     await ensureServerInitialized();
     requireAdmin(request.headers);
 
-    const params = await Promise.resolve(context.params);
+    const params = await context.params;
     const orgId = assertValidObjectId(params.orgId, "organisation id");
     const body = await request.json();
     const updates = parseOrganisationUpdateBody(body);

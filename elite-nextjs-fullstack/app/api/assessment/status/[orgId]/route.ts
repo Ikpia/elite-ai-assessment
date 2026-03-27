@@ -12,11 +12,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   _request: Request,
-  context: { params: Promise<{ orgId: string }> | { orgId: string } }
+  context: { params: Promise<{ orgId: string }> }
 ) {
   try {
     await ensureServerInitialized();
-    const params = await Promise.resolve(context.params);
+    const params = await context.params;
     const orgId = assertValidObjectId(params.orgId, "organisation id");
     const organisation = await getOrganisationStatusById(orgId);
 
