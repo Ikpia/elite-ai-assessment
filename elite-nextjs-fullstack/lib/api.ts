@@ -1,5 +1,11 @@
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
 
+interface ApiErrorPayload {
+  error?: string;
+  message?: string;
+  details?: unknown;
+}
+
 export class ApiError extends Error {
   public readonly status: number;
   public readonly details?: unknown;
@@ -49,10 +55,10 @@ export async function apiBlobRequest(path: string, init?: RequestInit): Promise<
   const response = await fetch(buildApiUrl(path), init);
 
   if (!response.ok) {
-    let payload: { error?: string; message?: string; details?: unknown } | null = null;
+    let payload: ApiErrorPayload | null = null;
 
     try {
-      payload = (await response.json()) as typeof payload;
+      payload = (await response.json()) as ApiErrorPayload;
     } catch {
       payload = null;
     }
