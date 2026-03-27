@@ -338,6 +338,7 @@ function buildAnswerOwnerSignature(draft: SubmissionDraft): string {
 }
 
 export function AssessmentShell() {
+  const [hasMounted, setHasMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [route, setRoute] = useState<AppRoute>(getCurrentRoute);
@@ -405,6 +406,10 @@ export function AssessmentShell() {
     ? currentDimensionQuestions.findIndex((item) => item.id === question.id)
     : -1;
   const apiHealthUrl = buildApiUrl(BACKEND_ENDPOINTS.health.check);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -2007,6 +2012,17 @@ export function AssessmentShell() {
       </div>
     );
   };
+
+  if (!hasMounted) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F9F8F4] text-stone-700">
+        <div className="flex items-center gap-3 font-serif text-xl">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Loading assessment...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F9F8F4] text-stone-800 selection:bg-nobel-gold selection:text-white">
