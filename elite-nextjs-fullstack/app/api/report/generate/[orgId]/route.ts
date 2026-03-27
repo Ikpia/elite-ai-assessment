@@ -22,10 +22,11 @@ export async function POST(
     const params = await context.params;
     const orgId = assertValidObjectId(params.orgId, "organisation id");
     const { filename, buffer } = await generateOrganisationReportPdf(orgId);
+    const pdfBytes = new Uint8Array(buffer);
 
     await markOrganisationApproved(orgId);
 
-    return new Response(buffer, {
+    return new Response(pdfBytes, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

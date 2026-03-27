@@ -251,7 +251,11 @@ function hasAnswerValue(answer: unknown): boolean {
 
 function isCompleteDraft(
   draft: SubmissionDraft
-): draft is SubmissionDraft & { role: RoleLevel } {
+): draft is Omit<SubmissionDraft, "firmType" | "role" | "consentAccepted"> & {
+  firmType: FirmType;
+  role: RoleLevel;
+  consentAccepted: true;
+} {
   return Boolean(
     draft.firmType &&
       draft.orgName.trim() &&
