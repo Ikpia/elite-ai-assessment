@@ -78,6 +78,36 @@ export interface OrganisationStatusResponse {
   reportSentAt: string | null;
 }
 
+export interface PublicDashboardOrganisation {
+  id: string;
+  orgName: string;
+  firmType: FirmType;
+  submissionCount: number;
+  averageScore: number;
+  createdAt: string;
+}
+
+export interface PublicDashboardSector {
+  firmType: FirmType;
+  organisationCount: number;
+  totalSubmissions: number;
+  averageScore: number;
+}
+
+export interface PublicDashboardSummary {
+  participatingFirms: number;
+  totalSubmissions: number;
+  averageScore: number;
+  highestAverageScore: number | null;
+}
+
+export interface PublicDashboardResponse {
+  summary: PublicDashboardSummary;
+  sectors: PublicDashboardSector[];
+  organisations: PublicDashboardOrganisation[];
+  generatedAt: string;
+}
+
 export interface QuestionOption {
   label: string;
   score: number;

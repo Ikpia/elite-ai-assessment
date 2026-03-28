@@ -3,6 +3,7 @@ import type {
   AssessmentSubmissionPayload,
   Organisation,
   OrganisationStatusResponse,
+  PublicDashboardResponse,
   ValidateEmailResponse
 } from "@/lib/shared/types";
 
@@ -20,6 +21,9 @@ export const BACKEND_ENDPOINTS = {
       list: "/api/admin/organisations",
       update: (organisationId: string) => `/api/admin/organisations/${organisationId}`
     }
+  },
+  public: {
+    dashboard: "/api/public/dashboard"
   },
   report: {
     generate: (organisationId: string) => `/api/report/generate/${organisationId}`,
@@ -122,6 +126,10 @@ export const backendApi = {
           body: JSON.stringify(payload)
         })
     }
+  },
+  public: {
+    dashboard: () =>
+      apiRequest<PublicDashboardResponse>(BACKEND_ENDPOINTS.public.dashboard)
   },
   report: {
     generate: (secret: string, organisationId: string) =>

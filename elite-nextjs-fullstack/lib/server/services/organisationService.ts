@@ -144,6 +144,13 @@ function toDashboardItem(
   };
 }
 
+const PUBLIC_DASHBOARD_FIRM_TYPES: FirmType[] = [
+  "financial-services",
+  "healthcare",
+  "consulting-firms",
+  "smes"
+];
+
 export async function ensureOrganisationExists(
   organisationKey: string,
   orgName: string,
@@ -269,6 +276,106 @@ export async function listOrganisationDashboards(): Promise<
   return organisations.map((organisation) =>
     toDashboardItem(organisation, counts.get(organisation.domain) || 0)
   );
+}
+
+export async function getPublicDashboardSnapshot(): Promise<{
+  summary: {
+    participatingFirms: number;
+    totalSubmissions: number;
+    averageScore: number;
+    highestAverageScore: number | null;
+  };
+  sectors: Array<{
+    firmType: FirmType;
+    organisationCount: number;
+    totalSubmissions: number;
+    averageScore: number;
+  }>;
+  organisations: Array<{
+    id: string;
+    orgName: string;
+    firmType: FirmType;
+    submissionCount: number;
+    averageScore: number;
+    createdAt: string;
+  }>;
+  generatedAt: string;
+}> {
+  const organisations = await listOrganisationDashboards();
+  const participatingOrganisations = organisations
+    .filter((organisation) => organisation.submissionCount > 0)
+    .map((organisation) => ({
+      id: organisation.id,
+      orgName: organisation.orgName,
+      firmType: organisation.firmType,
+      submissionCount: organisation.submissionCount,
+      averageScore: roundToOneDecimal(organisation.aggregatedScores.total),
+      createdAt: organisation.createdAt
+    }))
+    .sort((left, right) => {
+      if (right.averageScore !== left.averageScore) {
+        return right.averageScore - left.averageScore;
+      }
+
+      if (right.submissionCount !== left.submissionCount) {
+        return right.submissionCount - left.submissionCount;
+      }
+
+      return left.orgName.localeCompare(right.orgName);
+    });
+
+  const totalSubmissions = participatingOrganisations.reduce(
+    (total, organisation) => total + organisation.submissionCount,
+    0
+  );
+  const averageScore = participatingOrganisations.length
+    ? roundToOneDecimal(
+        participatingOrganisations.reduce(
+          (total, organisation) => total + organisation.averageScore,
+          0
+        ) / participatingOrganisations.length
+      )
+    : 0;
+  const highestAverageScore = participatingOrganisations.length
+    ? participatingOrganisations[0].averageScore
+    : null;
+
+  const sectors = PUBLIC_DASHBOARD_FIRM_TYPES.map((firmType) => {
+    const organisationsForSector = participatingOrganisations.filter(
+      (organisation) => organisation.firmType === firmType
+    );
+
+    const sectorAverageScore = organisationsForSector.length
+      ? roundToOneDecimal(
+          organisationsForSector.reduce(
+            (total, organisation) => total + organisation.averageScore,
+            0
+          ) / organisationsForSector.length
+        )
+      : 0;
+
+    return {
+      firmType,
+      organisationCount: organisationsForSector.length,
+      totalSubmissions: organisationsForSector.reduce(
+        (total, organisation) => total + organisation.submissionCount,
+        0
+      ),
+      averageScore: sectorAverageScore
+    };
+  });
+
+  return {
+    summary: {
+      participatingFirms: participatingOrganisations.length,
+      totalSubmissions,
+      averageScore,
+      highestAverageScore
+    },
+    sectors,
+    organisations: participatingOrganisations,
+    generatedAt: new Date().toISOString()
+  };
 }
 
 export async function updateOrganisationAdminSettings(

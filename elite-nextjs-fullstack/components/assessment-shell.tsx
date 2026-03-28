@@ -45,12 +45,14 @@ import {
 import type {
   FirmType,
   Organisation,
+  PublicDashboardResponse,
   RoleLevel,
   SubmissionDraft
 } from "@/lib/shared/types";
 
 type AppRoute =
   | { name: "landing" }
+  | { name: "dashboard" }
   | { name: "start" }
   | { name: "assessment"; step: number }
   | { name: "complete" }
@@ -103,18 +105,6 @@ const EMPTY_ENTRY_DRAFT: SubmissionDraft = {
   dept: "",
   consentAccepted: false
 };
-
-const ENTRY_HIGHLIGHTS = [
-  { icon: Clock3, label: "Time Commitment", value: "7-10 mins" },
-  { icon: ShieldCheck, label: "Response Handling", value: "Anonymised in final report" },
-  { icon: BarChart3, label: "Outcome", value: "Executive-grade readiness report" }
-];
-
-const ENTRY_STEPS = [
-  "Share respondent details so the assessment can be attributed correctly.",
-  "Complete 25 guided questions across readiness, leadership, workflow, and governance.",
-  "Elite Global AI aggregates the submissions into one director-ready report."
-];
 
 const ADMIN_NOTES = [
   "Review response counts and readiness scores before sending the final report.",
@@ -174,6 +164,44 @@ const SummaryCard = ({
   </div>
 );
 
+const InlineBanner = ({
+  tone,
+  message,
+  onClose,
+  className = ""
+}: {
+  tone: "success" | "error";
+  message: string;
+  onClose: () => void;
+  className?: string;
+}) => {
+  const isSuccess = tone === "success";
+  const Icon = isSuccess ? CheckCircle2 : AlertCircle;
+
+  return (
+    <div
+      className={`rounded-[18px] border px-4 py-3 text-[14px] shadow-[0_10px_24px_rgba(15,23,42,0.06)] sm:rounded-[22px] sm:text-[15px] ${
+        isSuccess
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-red-200 bg-red-50 text-red-700"
+      } ${className}`}
+    >
+      <div className="flex items-start gap-3">
+        <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+        <span className="min-w-0 flex-1 font-semibold">{message}</span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-current/15 bg-white/50 text-current transition-colors hover:bg-white/80"
+          aria-label="Dismiss notification"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 function parseRoute(pathname: string): AppRoute {
   const normalizedPath = pathname.replace(/\/+$/, "") || "/";
 
@@ -183,6 +211,10 @@ function parseRoute(pathname: string): AppRoute {
 
   if (normalizedPath === "/start") {
     return { name: "start" };
+  }
+
+  if (normalizedPath === "/dashboard") {
+    return { name: "dashboard" };
   }
 
   if (normalizedPath === "/complete") {
@@ -323,6 +355,64 @@ function formatReportDate(value: string | null): string {
   });
 }
 
+function formatDisplayDate(value: string): string {
+  return new Date(value).toLocaleDateString("en-NG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+function getScoreTone(total: number): {
+  badge: string;
+  chip: string;
+  progress: string;
+} {
+  if (total <= 25) {
+    return {
+      badge: "border-red-200 bg-red-50 text-red-700",
+      chip: "bg-red-500",
+      progress: "from-red-400 via-red-500 to-rose-500"
+    };
+  }
+
+  if (total <= 50) {
+    return {
+      badge: "border-amber-200 bg-amber-50 text-amber-700",
+      chip: "bg-amber-500",
+      progress: "from-amber-400 via-amber-500 to-orange-500"
+    };
+  }
+
+  if (total <= 75) {
+    return {
+      badge: "border-blue-200 bg-blue-50 text-blue-700",
+      chip: "bg-blue-600",
+      progress: "from-sky-400 via-blue-500 to-indigo-500"
+    };
+  }
+
+  return {
+    badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    chip: "bg-emerald-500",
+    progress: "from-emerald-400 via-emerald-500 to-teal-500"
+  };
+}
+
+function getOrganisationInitials(name: string): string {
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (!parts.length) {
+    return "EG";
+  }
+
+  return parts.map((part) => part[0]?.toUpperCase() || "").join("");
+}
+
 function getCompletionRatio(org: Organisation): number | null {
   if (!org.expectedRespondents || org.expectedRespondents <= 0) {
     return null;
@@ -345,6 +435,7 @@ export function AssessmentShell() {
   const [hasMounted, setHasMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [route, setRoute] = useState<AppRoute>(getCurrentRoute);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("checking");
   const [backendEnvironment, setBackendEnvironment] = useState("");
@@ -384,6 +475,9 @@ export function AssessmentShell() {
   const [adminError, setAdminError] = useState("");
   const [adminNotice, setAdminNotice] = useState("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [publicDashboard, setPublicDashboard] = useState<PublicDashboardResponse | null>(null);
+  const [publicDashboardLoading, setPublicDashboardLoading] = useState(false);
+  const [publicDashboardError, setPublicDashboardError] = useState("");
   const assessmentViewportRef = useRef<HTMLDivElement | null>(null);
   const assessmentContentRef = useRef<HTMLDivElement | null>(null);
   const [assessmentScale, setAssessmentScale] = useState(1);
@@ -410,6 +504,7 @@ export function AssessmentShell() {
     ? currentDimensionQuestions.findIndex((item) => item.id === question.id)
     : -1;
   const apiHealthUrl = buildApiUrl(BACKEND_ENDPOINTS.health.check);
+  const isLandingSurface = route.name === "landing" || route.name === "start";
 
   useEffect(() => {
     setHasMounted(true);
@@ -426,6 +521,80 @@ export function AssessmentShell() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const syncViewportMode = () => setIsMobileViewport(mediaQuery.matches);
+
+    syncViewportMode();
+    mediaQuery.addEventListener("change", syncViewportMode);
+
+    return () => {
+      mediaQuery.removeEventListener("change", syncViewportMode);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+
+    if (route.name === "start" || menuOpen) {
+      document.body.style.overflow = "hidden";
+    }
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [route, menuOpen]);
+
+  useEffect(() => {
+    if (route.name !== "start") {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        navigate("/");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [route]);
+
+  useEffect(() => {
+    if (!entryNotice) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setEntryNotice("");
+    }, 3000);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [entryNotice]);
+
+  useEffect(() => {
+    if (!adminNotice) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setAdminNotice("");
+    }, 3000);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [adminNotice]);
 
   useEffect(() => {
     let active = true;
@@ -492,6 +661,14 @@ export function AssessmentShell() {
   }, [route, secret, isAuthed]);
 
   useEffect(() => {
+    if (route.name !== "dashboard") {
+      return;
+    }
+
+    void fetchPublicDashboard();
+  }, [route]);
+
+  useEffect(() => {
     if (route.name !== "complete") {
       return;
     }
@@ -510,6 +687,12 @@ export function AssessmentShell() {
 
     let frame = 0;
     const updateAssessmentFit = () => {
+      if (isMobileViewport) {
+        setAssessmentScale(1);
+        setAssessmentScaledHeight(null);
+        return;
+      }
+
       frame = window.requestAnimationFrame(() => {
         const viewport = assessmentViewportRef.current;
         const content = assessmentContentRef.current;
@@ -544,7 +727,7 @@ export function AssessmentShell() {
       window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updateAssessmentFit);
     };
-  }, [route, currentStep, currentQuestionAnswered, submissionError]);
+  }, [route, currentStep, currentQuestionAnswered, submissionError, isMobileViewport]);
 
   const totalSubmissions = orgs.reduce((total, organisation) => total + organisation.submissionCount, 0);
   const reportsSent = orgs.filter((organisation) => organisation.status === "sent").length;
@@ -557,6 +740,8 @@ export function AssessmentShell() {
     if (typeof window === "undefined") {
       return;
     }
+
+    setMenuOpen(false);
 
     if (replace) {
       window.history.replaceState({}, "", path);
@@ -799,6 +984,22 @@ export function AssessmentShell() {
     }
   };
 
+  const fetchPublicDashboard = async () => {
+    setPublicDashboardLoading(true);
+    setPublicDashboardError("");
+
+    try {
+      const data = await backendApi.public.dashboard();
+      setPublicDashboard(data);
+    } catch (error) {
+      setPublicDashboardError(
+        getErrorMessage(error, "Unable to load the public dashboard right now.")
+      );
+    } finally {
+      setPublicDashboardLoading(false);
+    }
+  };
+
   const updateDraft = (organisationId: string, field: keyof AdminDraft, value: string) => {
     setDrafts((current) => ({
       ...current,
@@ -950,7 +1151,7 @@ export function AssessmentShell() {
     const sharedButtonClasses =
       "rounded-full bg-stone-900 px-5 py-2 text-white shadow-sm transition-colors hover:bg-stone-800";
 
-    if (route.name === "landing") {
+    if (isLandingSurface) {
       return (
         <>
           <div className="hidden items-center gap-8 text-sm font-medium tracking-wide text-stone-600 md:flex">
@@ -963,6 +1164,9 @@ export function AssessmentShell() {
             <a href="#authors" onClick={goToSection("authors")} className="cursor-pointer uppercase">
               Users
             </a>
+            <button onClick={() => navigate("/dashboard")} className="uppercase">
+              Dashboard
+            </button>
             <button onClick={() => navigate("/start")} className={sharedButtonClasses}>
               Start Assessment
             </button>
@@ -1004,11 +1208,11 @@ export function AssessmentShell() {
           <button onClick={() => navigate("/")} className="uppercase">
             Home
           </button>
+          <button onClick={() => navigate("/dashboard")} className="uppercase">
+            Dashboard
+          </button>
           <button onClick={() => navigate("/start")} className="uppercase">
             Start
-          </button>
-          <button onClick={() => navigate("/admin")} className="uppercase">
-            Admin
           </button>
         </div>
         <button className="p-2 md:hidden" onClick={() => setMenuOpen((current) => !current)}>
@@ -1024,10 +1228,46 @@ export function AssessmentShell() {
     }
 
     return (
-      <div className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-8 bg-[#F9F8F4] text-xl font-serif">
-        <button onClick={() => { setMenuOpen(false); navigate("/"); }}>Home</button>
-        <button onClick={() => { setMenuOpen(false); navigate("/start"); }}>Start</button>
-        <button onClick={() => { setMenuOpen(false); navigate("/admin"); }}>Admin</button>
+      <div className="fixed inset-0 z-40 bg-[#F9F8F4]/96 px-5 pb-8 pt-24 backdrop-blur-md">
+        <div className="mx-auto flex max-w-md flex-col gap-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-stone-400">
+                Navigation
+              </p>
+              <p className="mt-2 font-serif text-2xl text-stone-900">Explore the platform</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(false)}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-700 shadow-sm"
+              aria-label="Close navigation menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="grid gap-3">
+            {[
+              { label: "Home", description: "Return to the landing page", action: () => navigate("/") },
+              { label: "Dashboard", description: "View public benchmark results", action: () => navigate("/dashboard") },
+              { label: "Start Assessment", description: "Open the respondent entry flow", action: () => navigate("/start") }
+            ].map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  item.action();
+                }}
+                className="rounded-[24px] border border-stone-200 bg-white px-5 py-4 text-left shadow-sm transition-colors hover:border-stone-300"
+              >
+                <p className="font-serif text-[1.2rem] text-stone-900">{item.label}</p>
+                <p className="mt-1 text-sm leading-6 text-stone-500">{item.description}</p>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     );
   };
@@ -1040,22 +1280,45 @@ export function AssessmentShell() {
         <div className="relative z-10 mx-auto max-w-[min(98vw,1500px)] px-4 pb-12 sm:px-6 lg:px-8">
           <div className="grid min-h-[calc(100vh-8rem)] items-center gap-10 lg:grid-cols-[1fr_1fr] lg:gap-8">
             <div className="flex max-w-[46rem] flex-col items-center justify-center text-center">
-              <h1 className="font-serif text-5xl font-medium leading-tight text-stone-900 md:text-7xl lg:text-[5.8rem] lg:leading-[0.9]">
+              <h1 className="font-serif text-[2.9rem] font-medium leading-[0.95] text-stone-900 sm:text-5xl md:text-7xl lg:text-[5.8rem] lg:leading-[0.9]">
                 Elite Global AI <br />
-                <span className="mt-4 block text-3xl font-normal italic text-stone-600 md:text-5xl">
+                <span className="mt-4 block text-[1.8rem] font-normal italic text-stone-600 sm:text-3xl md:text-5xl">
                   AI Readiness Assessment Platform
                 </span>
               </h1>
-              <p className="mx-auto mt-8 max-w-2xl text-lg font-light leading-relaxed text-stone-700 md:text-xl">
+              <p className="mx-auto mt-6 max-w-2xl text-base font-light leading-8 text-stone-700 sm:mt-8 sm:text-lg md:text-xl">
                 A B2B assessment experience for benchmarking organisational AI readiness across
                 literacy, data readiness, strategy, workflow adoption, and governance.
               </p>
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-                <button
+              <div className="mt-8 flex w-full flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+                <motion.button
                   onClick={() => navigate("/start")}
-                  className="rounded-full bg-stone-900 px-6 py-3 text-white shadow-lg transition-colors hover:bg-stone-800"
+                  animate={{
+                    x: [0, -5, 5, -4, 4, -2, 2, 0],
+                    rotate: [0, -1, 1, -0.8, 0.8, 0],
+                    boxShadow: [
+                      "0 18px 44px rgba(37,99,235,0.22)",
+                      "0 24px 54px rgba(37,99,235,0.30)",
+                      "0 18px 44px rgba(37,99,235,0.22)"
+                    ]
+                  }}
+                  transition={{
+                    duration: 0.9,
+                    ease: "easeInOut",
+                    repeat: Infinity,
+                    repeatDelay: 2.6
+                  }}
+                  whileHover={{ scale: 1.03, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 px-8 py-4 text-[1.05rem] font-extrabold text-white shadow-[0_18px_44px_rgba(37,99,235,0.22)] ring-1 ring-blue-300/50 transition-transform sm:w-auto sm:px-10 sm:py-4 sm:text-[1.12rem]"
                 >
                   Begin Assessment
+                </motion.button>
+                <button
+                  onClick={() => navigate("/dashboard")}
+                  className="rounded-full border border-stone-200 bg-white/85 px-6 py-3 text-stone-800 shadow-sm transition-colors hover:border-stone-300 sm:w-auto"
+                >
+                  View Dashboard
                 </button>
               </div>
               <div className="mt-12 flex justify-center">
@@ -1068,7 +1331,7 @@ export function AssessmentShell() {
               </div>
             </div>
 
-            <div className="relative mx-auto -mt-10 h-[340px] w-full max-w-[560px] sm:-mt-12 sm:h-[430px] sm:max-w-[640px] lg:-mt-20 lg:h-[640px] lg:max-w-none">
+            <div className="relative mx-auto -mt-6 h-[280px] w-full max-w-[420px] sm:-mt-12 sm:h-[430px] sm:max-w-[640px] lg:-mt-20 lg:h-[640px] lg:max-w-none">
               <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(191,219,254,0.7),rgba(255,255,255,0)_68%)] blur-3xl" />
               <SpinningGlobeScene className="relative h-full w-full" />
             </div>
@@ -1077,8 +1340,8 @@ export function AssessmentShell() {
       </header>
 
       <main>
-        <section id="introduction" className="bg-white py-24">
-          <div className="container mx-auto grid grid-cols-1 items-start gap-12 px-6 md:grid-cols-12 md:px-12">
+        <section id="introduction" className="bg-white py-20 sm:py-24">
+          <div className="container mx-auto grid grid-cols-1 items-start gap-10 px-5 sm:px-6 md:grid-cols-12 md:px-12">
             <div className="md:col-span-4">
               <div className="mb-3 inline-block text-xs font-bold uppercase tracking-widest text-stone-500">
                 Overview
@@ -1105,8 +1368,8 @@ export function AssessmentShell() {
           </div>
         </section>
 
-        <section id="science" className="border-t border-stone-100 bg-white py-24">
-          <div className="container mx-auto px-6">
+        <section id="science" className="border-t border-stone-100 bg-white py-20 sm:py-24">
+          <div className="container mx-auto px-5 sm:px-6">
             <div className="grid grid-cols-1 items-center gap-16 lg:grid-cols-2">
               <div>
                 <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-xs font-bold uppercase tracking-widest text-stone-600">
@@ -1130,8 +1393,8 @@ export function AssessmentShell() {
           </div>
         </section>
 
-        <section className="bg-[#F9F8F4] py-24">
-          <div className="container mx-auto px-6">
+        <section className="bg-[#F9F8F4] py-20 sm:py-24">
+          <div className="container mx-auto px-5 sm:px-6">
             <div className="mx-auto mb-12 max-w-4xl text-center">
               <h2 className="mb-6 font-serif text-4xl text-stone-900 md:text-5xl">
                 Readiness Benchmarks
@@ -1148,8 +1411,8 @@ export function AssessmentShell() {
           </div>
         </section>
 
-        <section id="authors" className="border-t border-stone-300 bg-[#F5F4F0] py-24">
-          <div className="container mx-auto px-6">
+        <section id="authors" className="border-t border-stone-300 bg-[#F5F4F0] py-20 sm:py-24">
+          <div className="container mx-auto px-5 sm:px-6">
             <div className="mb-16 text-center">
               <div className="mb-3 inline-block text-xs font-bold uppercase tracking-widest text-stone-500">
                 PLATFORM USERS
@@ -1175,242 +1438,585 @@ export function AssessmentShell() {
     </>
   );
 
-  const renderStart = () => (
-    <div className="relative min-h-screen overflow-hidden bg-[#F9F8F4] pt-20 pb-8">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(219,234,254,0.55),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(191,219,254,0.4),transparent_32%)]" />
-      <div className="relative mx-auto max-w-[min(98vw,1500px)] px-2 pt-2 pb-4 sm:px-4 lg:px-6">
-        <section className="mb-4 rounded-[28px] border border-stone-200 bg-white/90 px-5 pb-5 pt-4 shadow-lg">
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.85fr]">
-            <div className="space-y-3">
-              <h1 className="font-serif text-[1.62rem] font-medium leading-[1.04] tracking-[0.01em] text-slate-950 sm:text-[1.96rem] lg:text-[2.42rem]">
-                Respondent entry for the organisation assessment.
-              </h1>
-              <p className="max-w-2xl text-[0.98rem] leading-7 tracking-[0.01em] text-slate-700 sm:text-[1.04rem]">
-                Capture the respondent details once, then move through the 25-question
-                diagnostic with backend validation, server-side scoring, and
-                organisation-level aggregation.
-              </p>
-            </div>
-            <div className="grid content-start gap-3 sm:grid-cols-3 lg:grid-cols-1">
-              {ENTRY_HIGHLIGHTS.map((item) => (
-                <SummaryCard key={item.label} icon={item.icon} label={item.label} value={item.value} />
-              ))}
-            </div>
-          </div>
-        </section>
+  const renderDashboard = () => {
+    const topFirm = publicDashboard?.organisations[0] || null;
+    const glassPanelClasses =
+      "relative overflow-hidden rounded-[30px] border border-white/30 bg-white/[0.12] backdrop-blur-[28px] shadow-[0_22px_70px_rgba(15,23,42,0.08)]";
+    const glassCardClasses =
+      "rounded-[24px] border border-white/28 bg-white/[0.08] backdrop-blur-[24px] shadow-[0_16px_42px_rgba(15,23,42,0.06)]";
+    const glassInsetClasses =
+      "border border-white/24 bg-[linear-gradient(180deg,rgba(255,255,255,0.14)_0%,rgba(255,255,255,0.04)_100%)] backdrop-blur-[24px] shadow-[inset_0_1px_0_rgba(255,255,255,0.24),0_14px_34px_rgba(15,23,42,0.04)]";
+    const summaryCards = [
+      {
+        label: "Firms Took the Test",
+        value: publicDashboard?.summary.participatingFirms ?? "—",
+        detail: "Organisations with at least one completed assessment."
+      },
+      {
+        label: "Average Scoring",
+        value: publicDashboard ? `${publicDashboard.summary.averageScore}/100` : "—",
+        detail: "Mean organisation score across all participating firms."
+      },
+      {
+        label: "Total Responses",
+        value: publicDashboard?.summary.totalSubmissions ?? "—",
+        detail: "Submitted respondent records contributing to the public benchmark."
+      },
+      {
+        label: "Highest Firm Average",
+        value:
+          publicDashboard?.summary.highestAverageScore !== null &&
+          publicDashboard?.summary.highestAverageScore !== undefined
+            ? `${publicDashboard.summary.highestAverageScore}/100`
+            : "—",
+        detail: "Current leading score across firms shown on this board."
+      }
+    ];
 
-        <section className="rounded-[28px] border border-stone-200 bg-white p-5 shadow-xl sm:p-6">
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
-            <div>
-              <div className="mb-5 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-blue-900 font-serif text-sm font-bold text-white">
-                  E
-                </div>
-                <div>
-                  <p className="font-serif text-lg font-bold tracking-tight text-slate-950">
-                    Respondent Entry
-                  </p>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                    Step 1 of 2
-                  </p>
-                </div>
+    return (
+      <div className="relative min-h-screen overflow-hidden bg-[#F9F8F4] pt-24 pb-20">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(219,234,254,0.6),transparent_28%),radial-gradient(circle_at_top_right,rgba(191,219,254,0.45),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(226,232,240,0.65),transparent_32%)]" />
+        <div className="absolute right-[-8%] top-[14%] h-[24rem] w-[24rem] rounded-full bg-blue-100/55 blur-3xl md:h-[30rem] md:w-[30rem]" />
+        <div className="absolute left-[-8%] top-[42%] h-[20rem] w-[20rem] rounded-full bg-white/40 blur-3xl md:h-[26rem] md:w-[26rem]" />
+
+        <div className="relative mx-auto max-w-[min(98vw,1500px)] px-4 sm:px-6 lg:px-8">
+          <motion.section
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
+            className={`${glassPanelClasses} rounded-[28px] px-5 py-6 sm:rounded-[34px] sm:px-8 sm:py-8 lg:px-10 lg:py-10`}
+          >
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.16),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.05),transparent_54%)]" />
+            <div className="flex flex-col gap-6">
+              <div className="relative">
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.08, duration: 0.28 }}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/[0.12] px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-600 shadow-[0_12px_28px_rgba(15,23,42,0.04)] backdrop-blur-xl"
+                >
+                  <BarChart3 className="h-3.5 w-3.5 text-blue-700" />
+                  Public Benchmark Dashboard
+                </motion.div>
               </div>
 
-              <div className="mb-5 space-y-2">
-                <h2 className="font-serif text-[1.42rem] font-medium text-slate-950 sm:text-[1.68rem]">
-                  Welcome
-                </h2>
-                <p className="max-w-2xl text-[0.98rem] leading-7 text-slate-500 sm:text-[1.04rem]">
-                  Provide the respondent information below before starting the
-                  assessment. Select the firm type first so the correct questionnaire is
-                  loaded for your organisation.
-                </p>
-              </div>
-
-              <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => { void handleStartAssessment(event); }}>
-                <div className="space-y-2.5">
-                  <label className="ml-1 text-[12px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
-                    Type of Firm
-                  </label>
-                  <select
-                    className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 text-[15px] font-medium text-slate-900"
-                    value={formData.firmType}
-                    onChange={(event) => updateFormField("firmType", event.target.value as FirmType | "")}
+              <motion.div
+                initial="hidden"
+                animate="visible"
+                variants={{
+                  hidden: {},
+                  visible: {
+                    transition: {
+                      staggerChildren: 0.06,
+                      delayChildren: 0.12
+                    }
+                  }
+                }}
+                className="relative grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-4"
+              >
+                {summaryCards.map((card) => (
+                  <motion.div
+                    key={card.label}
+                    variants={{
+                      hidden: { opacity: 0, y: 18 },
+                      visible: { opacity: 1, y: 0 }
+                    }}
+                    transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                    whileHover={{ y: -4 }}
+                    className={`${glassCardClasses} flex h-full min-h-[11.5rem] flex-col justify-between p-5 sm:min-h-[12.5rem]`}
                   >
-                    <option value="">Select firm type</option>
-                    {FIRM_TYPE_OPTIONS.map((firmOption) => (
-                      <option key={firmOption.value} value={firmOption.value}>
-                        {firmOption.label}
-                      </option>
-                    ))}
-                  </select>
-                  {formData.firmType ? (
-                    <p className="ml-1 text-[14px] leading-6 text-slate-500">
-                      {FIRM_TYPE_OPTIONS.find((option) => option.value === formData.firmType)?.description}
+                    <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-400">
+                      {card.label}
                     </p>
-                  ) : null}
-                </div>
+                    <div className="flex flex-1 flex-col justify-center py-4">
+                      <p className="font-serif text-4xl font-medium tracking-tight text-slate-950">
+                        {card.value}
+                      </p>
+                    </div>
+                    <p className="text-sm leading-6 text-slate-500">
+                      {card.detail}
+                    </p>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
+          </motion.section>
 
-                <div className="space-y-2.5">
-                  <label className="ml-1 text-[12px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="you@example.com"
-                    className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 text-[15px] font-medium text-slate-900"
-                    value={formData.email}
-                    onChange={(event) => updateFormField("email", event.target.value)}
-                    onBlur={() => { void validateEmailInput(formData.email); }}
-                  />
-                </div>
+          {publicDashboardError ? (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-6"
+            >
+              <InlineBanner
+                tone="error"
+                message={publicDashboardError}
+                onClose={() => setPublicDashboardError("")}
+                className="rounded-[24px] border-red-200/70 bg-red-50/70 backdrop-blur-xl shadow-[0_16px_36px_rgba(220,38,38,0.08)]"
+              />
+            </motion.div>
+          ) : null}
 
-                <div className="space-y-2.5">
-                  <label className="ml-1 text-[12px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Jane Doe"
-                    className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 text-[15px] font-medium text-slate-900"
-                    value={formData.name}
-                    onChange={(event) => updateFormField("name", event.target.value)}
-                  />
-                </div>
+          {publicDashboardLoading && !publicDashboard ? (
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`${glassPanelClasses} mt-6 flex min-h-[16rem] items-center justify-center`}
+            >
+              <div className="flex items-center gap-3 font-serif text-xl text-slate-700">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>Loading public dashboard...</span>
+              </div>
+            </motion.div>
+          ) : null}
 
-                <div className="space-y-2.5">
-                  <label className="ml-1 text-[12px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
-                    Organisation Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="GTBank"
-                    className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 text-[15px] font-medium text-slate-900"
-                    value={formData.orgName}
-                    onChange={(event) => updateFormField("orgName", event.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2.5">
-                  <label className="ml-1 text-[12px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
-                    Role Level
-                  </label>
-                  <select
-                    className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 text-[15px] font-medium text-slate-900"
-                    value={formData.role}
-                    onChange={(event) => updateFormField("role", event.target.value as RoleLevel | "")}
-                  >
-                    <option value="">Select role</option>
-                    {ROLE_OPTIONS.map((roleOption) => (
-                      <option key={roleOption.value} value={roleOption.value}>
-                        {roleOption.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-2.5">
-                  <label className="ml-1 text-[12px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
-                    Department
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Finance"
-                    className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 text-[15px] font-medium text-slate-900"
-                    value={formData.dept}
-                    onChange={(event) => updateFormField("dept", event.target.value)}
-                  />
-                </div>
-
-                <label className="md:col-span-2 flex items-start gap-4 rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 text-[15px] leading-6 text-slate-600">
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={formData.consentAccepted}
-                    onChange={(event) => updateFormField("consentAccepted", event.target.checked)}
-                  />
-                  <span>
-                    I consent to Elite Global AI processing my assessment data and
-                    understand that only anonymised organisation-level results will be
-                    visible in the final report.
-                  </span>
-                </label>
-
-                {entryNotice ? (
-                  <div className="md:col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[15px] font-semibold text-emerald-700">
-                    {entryNotice}
+          {publicDashboard ? (
+            <>
+              <motion.section
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.08, duration: 0.34 }}
+                className="mt-6 grid gap-6 xl:grid-cols-[0.92fr_1.08fr]"
+              >
+                <div className={`${glassPanelClasses} p-6 sm:p-7`}>
+                  <div className="mb-6 flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-400">
+                        Sector View
+                      </p>
+                      <h2 className="mt-2 font-serif text-[1.8rem] font-medium tracking-tight text-slate-950">
+                        Average scoring by firm type
+                      </h2>
+                    </div>
+                    <span className="rounded-full border border-white/30 bg-white/[0.12] px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500 backdrop-blur-xl">
+                      Generated {formatDisplayDate(publicDashboard.generatedAt)}
+                    </span>
                   </div>
-                ) : null}
 
-                {entryError ? (
-                  <div className="md:col-span-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-[15px] font-semibold text-red-700">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>{entryError}</span>
+                  <div className="space-y-4">
+                    {publicDashboard.sectors.map((sector) => {
+                      const tone = getScoreTone(sector.averageScore);
+
+                      return (
+                        <motion.div
+                          key={sector.firmType}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.26 }}
+                          whileHover={{ y: -4 }}
+                          className={`${glassInsetClasses} rounded-[24px] p-5`}
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="font-serif text-[1.15rem] font-medium text-slate-950">
+                                {getFirmTypeLabel(sector.firmType)}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-500">
+                                {sector.organisationCount} firm{sector.organisationCount === 1 ? "" : "s"} participating
+                              </p>
+                            </div>
+                            <span className={`rounded-full border px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.18em] ${tone.badge}`}>
+                              {sector.averageScore}/100 average
+                            </span>
+                          </div>
+
+                          <div className="mt-4 h-2.5 rounded-full bg-stone-100">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${Math.max(sector.averageScore, 4)}%` }}
+                              transition={{ delay: 0.12, duration: 0.5 }}
+                              className={`h-full rounded-full bg-gradient-to-r ${tone.progress}`}
+                            />
+                          </div>
+
+                          <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                            <span className="inline-flex items-center gap-2">
+                              <Building2 className="h-4 w-4" />
+                              {sector.organisationCount} organisations
+                            </span>
+                            <span className="inline-flex items-center gap-2">
+                              <Users className="h-4 w-4" />
+                              {sector.totalSubmissions} responses
+                            </span>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className={`${glassPanelClasses} p-6 sm:p-7`}>
+                  <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-400">
+                        Lead Snapshot
+                      </p>
+                      <h2 className="mt-2 font-serif text-[1.8rem] font-medium tracking-tight text-slate-950">
+                        Current benchmark leader
+                      </h2>
+                    </div>
+                    {topFirm ? (
+                      <span className={`rounded-full border px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.18em] ${getScoreTone(topFirm.averageScore).badge}`}>
+                        {getReadinessLabel(topFirm.averageScore)}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {topFirm ? (
+                    <motion.div
+                      initial={{ opacity: 0, x: 8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.28 }}
+                      whileHover={{ y: -4 }}
+                      className={`${glassInsetClasses} overflow-hidden rounded-[28px] p-6`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-blue-900 font-serif text-lg font-bold text-white shadow-[0_16px_36px_rgba(30,64,175,0.28)]">
+                            {getOrganisationInitials(topFirm.orgName)}
+                          </div>
+                          <div>
+                            <p className="font-serif text-[1.4rem] font-medium tracking-tight text-slate-950">
+                              {topFirm.orgName}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {getFirmTypeLabel(topFirm.firmType)} sector
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
+                            Average Score
+                          </p>
+                          <p className="mt-2 font-serif text-[2.4rem] font-medium tracking-tight text-slate-950">
+                            {topFirm.averageScore}/100
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 h-3 rounded-full bg-white/20 ring-1 ring-white/35 backdrop-blur-md">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.max(topFirm.averageScore, 6)}%` }}
+                          transition={{ delay: 0.25, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                          className={`h-full rounded-full bg-gradient-to-r ${getScoreTone(topFirm.averageScore).progress}`}
+                        />
+                      </div>
+
+                      <div className="mt-5 flex flex-wrap gap-3 text-sm text-slate-600">
+                        <span className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/[0.12] px-3 py-1.5 backdrop-blur-xl">
+                          <Users className="h-4 w-4" />
+                          {topFirm.submissionCount} responses
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/[0.12] px-3 py-1.5 backdrop-blur-xl">
+                          <CheckCircle2 className="h-4 w-4" />
+                          {getReadinessLabel(topFirm.averageScore)}
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/[0.12] px-3 py-1.5 backdrop-blur-xl">
+                          <Clock3 className="h-4 w-4" />
+                          Active since {formatDisplayDate(topFirm.createdAt)}
+                        </span>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <div className="flex min-h-[16rem] items-center justify-center rounded-[28px] border border-dashed border-white/35 bg-white/[0.12] text-center backdrop-blur-xl">
+                      <div className="max-w-md px-6">
+                        <p className="font-serif text-2xl text-slate-900">No participating firms yet</p>
+                        <p className="mt-3 text-sm leading-7 text-slate-500">
+                          Once organisations complete the assessment, they will appear here
+                          with their average scoring and sector position.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.section>
+
+              <motion.section
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.16, duration: 0.34 }}
+                className={`${glassPanelClasses} mt-6 p-6 sm:p-7`}
+              >
+                <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-400">
+                      Participating Firms
+                    </p>
+                    <h2 className="mt-2 font-serif text-[1.8rem] font-medium tracking-tight text-slate-950">
+                      Firms that took the test
+                    </h2>
+                  </div>
+                  <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
+                    {publicDashboard.organisations.length} listed
+                  </span>
+                </div>
+
+                {publicDashboard.organisations.length ? (
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {publicDashboard.organisations.map((organisation) => {
+                      const tone = getScoreTone(organisation.averageScore);
+
+                      return (
+                        <motion.article
+                          key={organisation.id}
+                          initial={{ opacity: 0, y: 16 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.24 }}
+                          whileHover={{ y: -5, scale: 1.01 }}
+                          className={`${glassInsetClasses} rounded-[26px] p-5`}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-slate-900 font-serif text-sm font-bold text-white">
+                                {getOrganisationInitials(organisation.orgName)}
+                              </div>
+                              <div>
+                                <p className="font-serif text-[1.15rem] font-medium leading-tight text-slate-950">
+                                  {organisation.orgName}
+                                </p>
+                                <p className="mt-1 text-sm text-slate-500">
+                                  {getFirmTypeLabel(organisation.firmType)}
+                                </p>
+                              </div>
+                            </div>
+
+                            <span className={`rounded-full border px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.18em] ${tone.badge}`}>
+                              {getReadinessLabel(organisation.averageScore)}
+                            </span>
+                          </div>
+
+                          <div className="mt-5 flex items-end justify-between gap-4">
+                            <div>
+                              <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
+                                Average Score
+                              </p>
+                              <p className="mt-2 font-serif text-[2rem] font-medium tracking-tight text-slate-950">
+                                {organisation.averageScore}/100
+                              </p>
+                            </div>
+                            <div className="text-right text-sm text-slate-500">
+                              <p>{organisation.submissionCount} responses</p>
+                              <p className="mt-1">Joined {formatDisplayDate(organisation.createdAt)}</p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 h-2.5 rounded-full bg-stone-100">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${Math.max(organisation.averageScore, 4)}%` }}
+                              transition={{ delay: 0.12, duration: 0.5 }}
+                              className={`h-full rounded-full bg-gradient-to-r ${tone.progress}`}
+                            />
+                          </div>
+                        </motion.article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex min-h-[14rem] items-center justify-center rounded-[28px] border border-dashed border-white/35 bg-white/[0.12] text-center backdrop-blur-xl">
+                    <div className="max-w-md px-6">
+                      <p className="font-serif text-2xl text-slate-900">No public results yet</p>
+                      <p className="mt-3 text-sm leading-7 text-slate-500">
+                        This space will populate automatically after organisations submit
+                        assessment responses.
+                      </p>
                     </div>
                   </div>
-                ) : null}
+                )}
+              </motion.section>
+            </>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
 
-                <div className="md:col-span-2 flex gap-3">
+  const renderStart = () => (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/45 px-2 py-2 backdrop-blur-[6px] sm:px-4 sm:py-4"
+      style={{
+        paddingTop: "max(0.5rem, env(safe-area-inset-top))",
+        paddingBottom: "max(0.75rem, calc(env(safe-area-inset-bottom) + 0.5rem))"
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          navigate("/");
+        }
+      }}
+    >
+      <div className="mx-auto flex min-h-full w-full max-w-[44rem] items-start justify-center sm:items-center">
+        <motion.div
+          initial={{ opacity: 0, y: 28 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+          className="w-full py-1 sm:py-0"
+        >
+          <div
+            className="relative flex w-full flex-col overflow-hidden rounded-[22px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.97)_100%)] shadow-[0_45px_140px_rgba(15,23,42,0.28),0_16px_48px_rgba(15,23,42,0.14)] sm:rounded-[34px]"
+            style={{
+              maxHeight:
+                "min(52rem, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem))"
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              className="absolute right-2.5 top-2.5 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/92 text-slate-500 shadow-[0_12px_32px_rgba(15,23,42,0.12)] transition-colors hover:text-slate-900 sm:right-4 sm:top-4 sm:h-11 sm:w-11"
+              aria-label="Close assessment entry modal"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <form
+              className="flex min-h-0 flex-1 flex-col"
+              onSubmit={(event) => { void handleStartAssessment(event); }}
+            >
+              <div className="min-h-0 flex-1 overflow-y-auto px-3.5 pb-3 pt-14 overscroll-contain sm:px-8 sm:pb-5 sm:pt-8">
+                <div className="space-y-3 sm:space-y-4">
+                  <div className="grid gap-3 md:grid-cols-2 sm:gap-4">
+                    <div className="space-y-2">
+                      <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-400 sm:text-[12px]">
+                        Type of Firm
+                      </label>
+                      <select
+                        className="w-full rounded-[18px] border border-stone-200/90 bg-white px-4 py-3.5 text-[15px] font-medium text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:rounded-[22px] sm:px-5 sm:py-4"
+                        value={formData.firmType}
+                        onChange={(event) => updateFormField("firmType", event.target.value as FirmType | "")}
+                      >
+                        <option value="">Select firm type</option>
+                        {FIRM_TYPE_OPTIONS.map((firmOption) => (
+                          <option key={firmOption.value} value={firmOption.value}>
+                            {firmOption.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-400 sm:text-[12px]">
+                        Email Address
+                      </label>
+                      <input
+                        type="email"
+                        placeholder="you@example.com"
+                        className="w-full rounded-[18px] border border-stone-200/90 bg-white px-4 py-3.5 text-[15px] font-medium text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:rounded-[22px] sm:px-5 sm:py-4"
+                        value={formData.email}
+                        onChange={(event) => updateFormField("email", event.target.value)}
+                        onBlur={() => { void validateEmailInput(formData.email); }}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-400 sm:text-[12px]">
+                        Full Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Jane Doe"
+                        className="w-full rounded-[18px] border border-stone-200/90 bg-white px-4 py-3.5 text-[15px] font-medium text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:rounded-[22px] sm:px-5 sm:py-4"
+                        value={formData.name}
+                        onChange={(event) => updateFormField("name", event.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-400 sm:text-[12px]">
+                        Organisation Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="GTBank"
+                        className="w-full rounded-[18px] border border-stone-200/90 bg-white px-4 py-3.5 text-[15px] font-medium text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:rounded-[22px] sm:px-5 sm:py-4"
+                        value={formData.orgName}
+                        onChange={(event) => updateFormField("orgName", event.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-400 sm:text-[12px]">
+                        Role Level
+                      </label>
+                      <select
+                        className="w-full rounded-[18px] border border-stone-200/90 bg-white px-4 py-3.5 text-[15px] font-medium text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:rounded-[22px] sm:px-5 sm:py-4"
+                        value={formData.role}
+                        onChange={(event) => updateFormField("role", event.target.value as RoleLevel | "")}
+                      >
+                        <option value="">Select role</option>
+                        {ROLE_OPTIONS.map((roleOption) => (
+                          <option key={roleOption.value} value={roleOption.value}>
+                            {roleOption.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-400 sm:text-[12px]">
+                        Department
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Finance"
+                        className="w-full rounded-[18px] border border-stone-200/90 bg-white px-4 py-3.5 text-[15px] font-medium text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:rounded-[22px] sm:px-5 sm:py-4"
+                        value={formData.dept}
+                        onChange={(event) => updateFormField("dept", event.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <label className="flex items-start gap-3 rounded-[18px] border border-stone-200/80 bg-stone-50/85 px-4 py-3.5 text-[14px] leading-6 text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] sm:gap-4 sm:rounded-[22px] sm:px-5 sm:py-4 sm:text-[15px]">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border-stone-300 text-blue-700 focus:ring-blue-200"
+                      checked={formData.consentAccepted}
+                      onChange={(event) => updateFormField("consentAccepted", event.target.checked)}
+                    />
+                    <span>
+                      I consent to Elite Global AI processing my assessment data and
+                      understand that only anonymised organisation-level results will be
+                      visible in the final report.
+                    </span>
+                  </label>
+
+                  {entryNotice ? (
+                    <InlineBanner tone="success" message={entryNotice} onClose={() => setEntryNotice("")} />
+                  ) : null}
+
+                  {entryError ? (
+                    <InlineBanner tone="error" message={entryError} onClose={() => setEntryError("")} />
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="border-t border-white/65 bg-white/78 px-3.5 py-3 backdrop-blur-xl sm:px-8 sm:py-4">
+                <div className="flex flex-col gap-2.5 sm:flex-row sm:gap-3">
                   <button
                     type="submit"
                     disabled={entryLoading}
-                    className="flex flex-1 items-center justify-center gap-3 rounded-full bg-blue-900 px-6 py-3 text-[16px] font-bold text-white"
+                    className="inline-flex flex-1 items-center justify-center gap-3 rounded-full bg-blue-900 px-5 py-3 text-[15px] font-bold text-white shadow-[0_16px_38px_rgba(30,64,175,0.28)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70 sm:px-6 sm:py-3.5 sm:text-[16px]"
                   >
-                    {entryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Start Assessment"}
+                    {entryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Continue to Questions"}
                     <ArrowRight className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
                     onClick={() => navigate("/")}
-                    className="rounded-full border border-stone-200 px-5 py-3 text-[16px] font-semibold text-stone-700"
+                    className="inline-flex items-center justify-center rounded-full border border-stone-200 bg-white px-5 py-3 text-[15px] font-semibold text-stone-700 shadow-[0_10px_28px_rgba(15,23,42,0.06)] transition-colors hover:border-stone-300 hover:text-stone-950 sm:py-3.5 sm:text-[16px]"
                   >
-                    Home
+                    Cancel
                   </button>
                 </div>
-              </form>
-            </div>
-
-            <aside className="space-y-4">
-              <div className="rounded-[24px] border border-blue-100 bg-blue-50/60 p-6">
-                <p className="mb-4 text-[10px] font-extrabold uppercase tracking-[0.22em] text-slate-500">
-                  What Happens Next
-                </p>
-                <div className="space-y-3">
-                  {ENTRY_STEPS.map((step, index) => (
-                    <div key={step} className="flex gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-900 text-sm font-bold text-white">
-                        {index + 1}
-                      </div>
-                      <p className="text-[14px] leading-6 text-slate-700">{step}</p>
-                    </div>
-                  ))}
-                </div>
               </div>
-
-              <div className="rounded-[24px] border border-stone-200 bg-stone-50 p-6">
-                <div className="mb-3 flex items-center gap-3 text-slate-900">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
-                    <Users className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-[15px] font-bold">Assessment guidance</p>
-                    <p className="text-[10px] uppercase tracking-[0.22em] text-slate-400">
-                      Recommended volume
-                    </p>
-                  </div>
-                </div>
-                <p className="text-[14px] leading-6 text-slate-700">
-                  Best run with 5 to 20 respondents per organisation so the director
-                  receives a credible cross-functional view rather than a single-person
-                  opinion.
-                </p>
-              </div>
-            </aside>
+            </form>
           </div>
-        </section>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 
   const renderAssessment = () => {
@@ -1429,10 +2035,13 @@ export function AssessmentShell() {
       : "Choose the single option that best describes how your team operates today, not the future target state.";
 
     return (
-      <div className="relative min-h-screen overflow-hidden bg-[#F4F7FC] pt-20 pb-4">
+      <div className="relative min-h-screen overflow-hidden bg-[#F4F7FC] pt-20 pb-8 sm:pb-4">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(219,234,254,0.55),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(191,219,254,0.35),transparent_34%)]" />
 
-        <div ref={assessmentViewportRef} className="relative mx-auto max-w-[min(98vw,1500px)] overflow-hidden px-2 pb-4 sm:px-4 lg:px-6">
+        <div
+          ref={assessmentViewportRef}
+          className={`relative mx-auto max-w-[min(98vw,1500px)] px-2 pb-4 sm:px-4 lg:px-6 ${isMobileViewport ? "overflow-visible" : "overflow-hidden"}`}
+        >
           <div style={{ height: assessmentScaledHeight ? `${assessmentScaledHeight}px` : undefined }}>
             <div
               ref={assessmentContentRef}
@@ -1443,7 +2052,7 @@ export function AssessmentShell() {
                 width: assessmentScale < 1 ? `${100 / assessmentScale}%` : "100%"
               }}
             >
-              <section className="mb-4 rounded-[24px] border border-blue-100 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
+              <section className="mb-4 rounded-[20px] border border-blue-100 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)] sm:rounded-[24px]">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-3">
                     <div className="flex flex-wrap gap-2">
@@ -1497,7 +2106,7 @@ export function AssessmentShell() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -12 }}
                   transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                  className="flex flex-col rounded-[28px] border border-blue-100 bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] sm:p-6"
+                  className="flex flex-col rounded-[22px] border border-blue-100 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] sm:rounded-[28px] sm:p-6"
                 >
                   <div className="mb-5 space-y-4">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1509,7 +2118,7 @@ export function AssessmentShell() {
                       </span>
                     </div>
 
-                    <h1 className="w-full font-serif text-[1.22rem] font-medium leading-[1.24] tracking-[0.01em] text-slate-950 sm:text-[1.42rem] lg:text-[1.68rem]">
+                    <h1 className="w-full font-serif text-[1.1rem] font-medium leading-[1.3] tracking-[0.01em] text-slate-950 sm:text-[1.42rem] lg:text-[1.68rem]">
                       {question.text}
                     </h1>
 
@@ -1530,7 +2139,7 @@ export function AssessmentShell() {
                           key={option.value}
                           type="button"
                           onClick={() => handleSelect(option.value)}
-                          className={`group h-full w-full rounded-[22px] border px-4 py-3 text-left transition-all ${selected ? "border-blue-500 bg-blue-50 shadow-[0_10px_24px_rgba(37,99,235,0.12)]" : "border-stone-200 bg-white hover:border-blue-200 hover:bg-blue-50/35"}`}
+                          className={`group h-full w-full rounded-[18px] border px-4 py-3 text-left transition-all sm:rounded-[22px] ${selected ? "border-blue-500 bg-blue-50 shadow-[0_10px_24px_rgba(37,99,235,0.12)]" : "border-stone-200 bg-white hover:border-blue-200 hover:bg-blue-50/35"}`}
                         >
                           <div className="flex h-full items-start gap-3">
                             <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-xs font-extrabold ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-slate-50 text-slate-500"}`}>
@@ -1541,12 +2150,12 @@ export function AssessmentShell() {
                                 <p className="text-[15px] font-semibold leading-6 text-slate-900 sm:text-base">
                                   {option.label}
                                 </p>
-                                <div className={`inline-flex h-8 min-w-[88px] items-center justify-center rounded-full border px-3 text-[10px] font-extrabold uppercase tracking-[0.14em] ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-white text-slate-400"}`}>
-                                  {selected ? (
-                                    <span className="inline-flex items-center gap-1.5">
-                                      <CheckCircle2 className="h-3.5 w-3.5" />
-                                      Selected
-                                    </span>
+                                  <div className={`inline-flex h-8 min-w-[78px] items-center justify-center rounded-full border px-3 text-[10px] font-extrabold uppercase tracking-[0.14em] sm:min-w-[88px] ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-white text-slate-400"}`}>
+                                    {selected ? (
+                                      <span className="inline-flex items-center gap-1.5">
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                        Selected
+                                      </span>
                                   ) : question.multiSelect ? "Add" : "Select"}
                                 </div>
                               </div>
@@ -1558,11 +2167,8 @@ export function AssessmentShell() {
                   </div>
 
                   {submissionError ? (
-                    <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                      <div className="flex items-start gap-3">
-                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                        <span>{submissionError}</span>
-                      </div>
+                    <div className="mt-4">
+                      <InlineBanner tone="error" message={submissionError} onClose={() => setSubmissionError("")} className="rounded-2xl text-sm" />
                     </div>
                   ) : null}
 
@@ -1620,7 +2226,7 @@ export function AssessmentShell() {
           <p className="mb-3 text-[11px] font-extrabold uppercase tracking-[0.24em] text-stone-400">
             Assessment Complete
           </p>
-          <h1 className="mb-4 text-4xl text-stone-900 sm:text-5xl">
+          <h1 className="mb-4 text-[2.2rem] text-stone-900 sm:text-5xl">
             Response recorded successfully
           </h1>
           <p className="mx-auto mb-8 max-w-2xl text-base leading-relaxed text-stone-600 sm:text-lg">
@@ -1758,12 +2364,7 @@ export function AssessmentShell() {
                     </div>
 
                     {adminError ? (
-                      <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
-                        <div className="flex items-start gap-3">
-                          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                          <span>{adminError}</span>
-                        </div>
-                      </div>
+                      <InlineBanner tone="error" message={adminError} onClose={() => setAdminError("")} className="rounded-2xl" />
                     ) : null}
 
                     <button
@@ -1841,16 +2442,13 @@ export function AssessmentShell() {
             </div>
 
             {adminNotice ? (
-              <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[14px] font-semibold text-emerald-700">
-                {adminNotice}
+              <div className="mt-5">
+                <InlineBanner tone="success" message={adminNotice} onClose={() => setAdminNotice("")} className="rounded-2xl" />
               </div>
             ) : null}
             {adminError ? (
-              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-700">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>{adminError}</span>
-                </div>
+              <div className="mt-5">
+                <InlineBanner tone="error" message={adminError} onClose={() => setAdminError("")} className="rounded-2xl" />
               </div>
             ) : null}
           </div>
@@ -2031,12 +2629,12 @@ export function AssessmentShell() {
   return (
     <div className="min-h-screen bg-[#F9F8F4] text-stone-800 selection:bg-nobel-gold selection:text-white">
       <nav className={`fixed left-0 right-0 top-0 z-50 transition-all duration-300 ${scrolled ? "bg-[#F9F8F4]/90 py-4 shadow-sm backdrop-blur-md" : "bg-transparent py-6"}`}>
-        <div className="container mx-auto flex items-center justify-between px-6">
+        <div className="container mx-auto flex items-center justify-between px-4 sm:px-6">
           <div className="flex cursor-pointer items-center gap-4" onClick={() => navigate("/")}>
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-nobel-gold pb-1 text-xl font-serif font-bold text-white shadow-sm">
               E
             </div>
-            <span className={`font-serif text-lg font-bold tracking-wide transition-opacity ${scrolled || route.name !== "landing" ? "opacity-100" : "opacity-0 md:opacity-100"}`}>
+            <span className={`font-serif text-lg font-bold tracking-wide transition-opacity ${scrolled || !isLandingSurface ? "opacity-100" : "opacity-0 md:opacity-100"}`}>
               ELITE GLOBAL AI <span className="font-normal text-stone-500">Assessment</span>
             </span>
           </div>
@@ -2046,7 +2644,8 @@ export function AssessmentShell() {
 
       {renderMobileMenu()}
 
-      {route.name === "landing" ? renderLanding() : null}
+      {isLandingSurface ? renderLanding() : null}
+      {route.name === "dashboard" ? renderDashboard() : null}
       {route.name === "start" ? renderStart() : null}
       {route.name === "assessment" ? renderAssessment() : null}
       {route.name === "complete" ? renderComplete() : null}
@@ -2054,7 +2653,7 @@ export function AssessmentShell() {
 
       {route.name !== "assessment" && route.name !== "start" ? (
         <footer className="border-t border-slate-800 bg-[#0f172a] text-slate-300">
-          <div className="container mx-auto px-6 py-14">
+          <div className="container mx-auto px-5 py-14 sm:px-6">
             <div className="grid gap-10 lg:grid-cols-[1.2fr_0.75fr_0.95fr]">
               <div className="space-y-5">
                 <div className="flex items-center gap-4">
@@ -2090,11 +2689,11 @@ export function AssessmentShell() {
                   <button type="button" onClick={() => navigate("/")} className="text-left font-medium text-slate-200">
                     Home
                   </button>
+                  <button type="button" onClick={() => navigate("/dashboard")} className="text-left font-medium text-slate-200">
+                    Public Dashboard
+                  </button>
                   <button type="button" onClick={() => navigate("/start")} className="text-left font-medium text-slate-200">
                     Start Assessment
-                  </button>
-                  <button type="button" onClick={() => navigate("/admin")} className="text-left font-medium text-slate-200">
-                    Admin Console
                   </button>
                   <a href={MARKETING_SITE_URL} target="_blank" rel="noreferrer" className="font-medium text-slate-200">
                     eliteglobalai.com

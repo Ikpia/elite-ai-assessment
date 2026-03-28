@@ -303,6 +303,19 @@ export const SpinningGlobeScene: React.FC<{ className?: string }> = ({ className
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+    const syncViewportMode = () => setIsMobileViewport(mediaQuery.matches);
+
+    syncViewportMode();
+    mediaQuery.addEventListener('change', syncViewportMode);
+
+    return () => {
+      mediaQuery.removeEventListener('change', syncViewportMode);
+    };
+  }, []);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -324,9 +337,13 @@ export const SpinningGlobeScene: React.FC<{ className?: string }> = ({ className
         return;
       }
 
-      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+      const resolutionScale = isMobileViewport ? 0.55 : 1;
+      const targetWidth = Math.max(320, Math.round(video.videoWidth * resolutionScale));
+      const targetHeight = Math.max(320, Math.round(video.videoHeight * resolutionScale));
+
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
       }
 
       context.clearRect(0, 0, canvas.width, canvas.height);
@@ -388,7 +405,7 @@ export const SpinningGlobeScene: React.FC<{ className?: string }> = ({ className
       }
       video.pause();
     };
-  }, []);
+  }, [isMobileViewport]);
 
   return (
     <div className={className || 'relative h-full w-full'}>
@@ -408,7 +425,7 @@ export const SpinningGlobeScene: React.FC<{ className?: string }> = ({ className
         />
         <canvas
           ref={canvasRef}
-          className={`h-[116%] w-[116%] -translate-y-[12%] object-contain drop-shadow-[0_30px_80px_rgba(15,23,42,0.12)] ${isReady ? 'opacity-100' : 'opacity-0'}`}
+          className={`h-[104%] w-[104%] -translate-y-[6%] object-contain drop-shadow-[0_24px_60px_rgba(15,23,42,0.12)] sm:h-[116%] sm:w-[116%] sm:-translate-y-[12%] sm:drop-shadow-[0_30px_80px_rgba(15,23,42,0.12)] ${isReady ? 'opacity-100' : 'opacity-0'}`}
         />
       </div>
     </div>
