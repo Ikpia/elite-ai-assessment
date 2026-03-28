@@ -79,15 +79,23 @@ interface AdminDraft {
 
 type AdminDraftState = Record<string, AdminDraft>;
 
+interface PublicDashboardCacheEntry {
+  data: PublicDashboardResponse;
+  cachedAt: number;
+}
+
 const RESPONDENT_STORAGE_KEY = "elite-frontend:respondent";
 const ANSWERS_STORAGE_KEY = "elite-frontend:answers";
 const LAST_SUBMISSION_STORAGE_KEY = "elite-frontend:last-submission";
 const ADMIN_SECRET_STORAGE_KEY = "elite-frontend:admin-secret";
 const ANSWER_OWNER_STORAGE_KEY = "elite-frontend:answer-owner";
+const PUBLIC_DASHBOARD_STORAGE_KEY = "elite-frontend:public-dashboard";
 const MARKETING_SITE_URL = (
   process.env.NEXT_PUBLIC_MARKETING_SITE_URL || "https://eliteglobalai.com"
 ).replace(/\/$/, "");
 const COMPLETION_REDIRECT_DELAY_MS = 6000;
+const PUBLIC_DASHBOARD_CACHE_TTL_MS = 30_000;
+const PUBLIC_DASHBOARD_PREFETCH_DELAY_MS = 1200;
 const FOOTER_SOCIALS = [
   { label: "LinkedIn", href: MARKETING_SITE_URL, icon: Linkedin },
   { label: "Instagram", href: MARKETING_SITE_URL, icon: Instagram },
@@ -271,6 +279,23 @@ function removeStorage(key: string) {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(key);
   }
+}
+
+function readPublicDashboardCacheEntry(): PublicDashboardCacheEntry | null {
+  const cached = readStorage<PublicDashboardCacheEntry | null>(
+    PUBLIC_DASHBOARD_STORAGE_KEY,
+    null
+  );
+
+  if (!cached || typeof cached.cachedAt !== "number" || !cached.data) {
+    return null;
+  }
+
+  return cached;
+}
+
+function isFreshPublicDashboardCache(cachedAt: number): boolean {
+  return Date.now() - cachedAt < PUBLIC_DASHBOARD_CACHE_TTL_MS;
 }
 
 function hasAnswerValue(answer: unknown): boolean {
@@ -475,7 +500,12 @@ export function AssessmentShell() {
   const [adminError, setAdminError] = useState("");
   const [adminNotice, setAdminNotice] = useState("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [publicDashboard, setPublicDashboard] = useState<PublicDashboardResponse | null>(null);
+  const [publicDashboard, setPublicDashboard] = useState<PublicDashboardResponse | null>(() =>
+    readPublicDashboardCacheEntry()?.data || null
+  );
+  const [publicDashboardFetchedAt, setPublicDashboardFetchedAt] = useState<number | null>(() =>
+    readPublicDashboardCacheEntry()?.cachedAt || null
+  );
   const [publicDashboardLoading, setPublicDashboardLoading] = useState(false);
   const [publicDashboardError, setPublicDashboardError] = useState("");
   const assessmentViewportRef = useRef<HTMLDivElement | null>(null);
@@ -661,12 +691,33 @@ export function AssessmentShell() {
   }, [route, secret, isAuthed]);
 
   useEffect(() => {
-    if (route.name !== "dashboard") {
+    if (route.name === "dashboard") {
+      const hasFreshState =
+        publicDashboardFetchedAt !== null &&
+        isFreshPublicDashboardCache(publicDashboardFetchedAt);
+
+      void fetchPublicDashboard({
+        background: hasFreshState || Boolean(publicDashboard),
+        force: !hasFreshState
+      });
       return;
     }
 
-    void fetchPublicDashboard();
-  }, [route]);
+    if (
+      publicDashboardFetchedAt !== null &&
+      isFreshPublicDashboardCache(publicDashboardFetchedAt)
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void fetchPublicDashboard({ background: true });
+    }, PUBLIC_DASHBOARD_PREFETCH_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [route.name, publicDashboard, publicDashboardFetchedAt]);
 
   useEffect(() => {
     if (route.name !== "complete") {
@@ -948,6 +999,9 @@ export function AssessmentShell() {
         submissionCount: response.organisationStatus.submissionCount
       });
 
+      removeStorage(PUBLIC_DASHBOARD_STORAGE_KEY);
+      setPublicDashboard(null);
+      setPublicDashboardFetchedAt(null);
       clearAssessmentStorage();
       navigate("/complete");
     } catch (error) {
@@ -984,17 +1038,59 @@ export function AssessmentShell() {
     }
   };
 
-  const fetchPublicDashboard = async () => {
-    setPublicDashboardLoading(true);
+  const applyPublicDashboardSnapshot = (
+    snapshot: PublicDashboardResponse,
+    cachedAt = Date.now()
+  ) => {
+    setPublicDashboard(snapshot);
+    setPublicDashboardFetchedAt(cachedAt);
+    setPublicDashboardError("");
+    writeStorage(PUBLIC_DASHBOARD_STORAGE_KEY, {
+      data: snapshot,
+      cachedAt
+    } satisfies PublicDashboardCacheEntry);
+  };
+
+  const fetchPublicDashboard = async (
+    options: { background?: boolean; force?: boolean } = {}
+  ) => {
+    const { background = false, force = false } = options;
+    const cachedEntry = !force ? readPublicDashboardCacheEntry() : null;
+    const hasExistingSnapshot = Boolean(publicDashboard || cachedEntry);
+    const hasFreshState =
+      !force &&
+      publicDashboard &&
+      publicDashboardFetchedAt !== null &&
+      isFreshPublicDashboardCache(publicDashboardFetchedAt);
+
+    if (hasFreshState) {
+      return publicDashboard;
+    }
+
+    if (cachedEntry) {
+      applyPublicDashboardSnapshot(cachedEntry.data, cachedEntry.cachedAt);
+
+      if (!force && isFreshPublicDashboardCache(cachedEntry.cachedAt)) {
+        return cachedEntry.data;
+      }
+    }
+
+    if (!background || !hasExistingSnapshot) {
+      setPublicDashboardLoading(true);
+    }
     setPublicDashboardError("");
 
     try {
       const data = await backendApi.public.dashboard();
-      setPublicDashboard(data);
+      applyPublicDashboardSnapshot(data);
+      return data;
     } catch (error) {
-      setPublicDashboardError(
-        getErrorMessage(error, "Unable to load the public dashboard right now.")
-      );
+      if (!background || !hasExistingSnapshot) {
+        setPublicDashboardError(
+          getErrorMessage(error, "Unable to load the public dashboard right now.")
+        );
+      }
+      return null;
     } finally {
       setPublicDashboardLoading(false);
     }
@@ -2291,37 +2387,6 @@ export function AssessmentShell() {
         <div className="relative min-h-screen overflow-hidden bg-[#F9F8F4] pt-20 pb-8">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(219,234,254,0.52),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(191,219,254,0.38),transparent_34%)]" />
           <div className="relative mx-auto max-w-[min(98vw,1500px)] px-2 pt-2 pb-4 sm:px-4 lg:px-6">
-            <section className="mb-4 rounded-[28px] border border-stone-200 bg-white/90 px-5 pb-5 pt-4 shadow-lg">
-              <div className="grid gap-4 lg:grid-cols-[1.2fr_0.85fr]">
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-[0.2em] text-blue-700">
-                      Delivery Workflow
-                    </span>
-                    <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-[0.2em] text-stone-500">
-                      Internal Operations
-                    </span>
-                  </div>
-                  <div className="max-w-3xl space-y-3">
-                    <h1 className="font-serif text-[1.62rem] font-medium leading-[1.04] tracking-[0.01em] text-slate-950 sm:text-[1.96rem] lg:text-[2.42rem]">
-                      Review the aggregate, validate the recipient, then release the report.
-                    </h1>
-                    <p className="max-w-2xl text-[0.98rem] leading-7 tracking-[0.01em] text-slate-700 sm:text-[1.04rem]">
-                      This console is for Elite Global AI operations only. Use it to manage
-                      organisation readiness records, preview the PDF, and send the final
-                      report to the right director.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid content-start gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                  <SummaryCard icon={ShieldCheck} label="Access" value="Protected by shared admin token" />
-                  <SummaryCard icon={BarChart3} label="Visibility" value="Aggregate scores before final delivery" />
-                  <SummaryCard icon={Send} label="Output" value="Director-ready PDF report via email" />
-                </div>
-              </div>
-            </section>
-
             <section className="rounded-[28px] border border-stone-200 bg-white p-5 shadow-xl sm:p-6">
               <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
                 <div>

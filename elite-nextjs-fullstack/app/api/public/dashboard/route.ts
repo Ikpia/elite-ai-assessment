@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getPublicDashboardSnapshot } from "@/lib/server/services/organisationService";
+import { getCachedPublicDashboardSnapshot } from "@/lib/server/services/organisationService";
 import {
   ensureServerInitialized,
   handleRouteError
@@ -13,9 +13,13 @@ export async function GET() {
   try {
     await ensureServerInitialized();
 
-    const dashboard = await getPublicDashboardSnapshot();
+    const dashboard = await getCachedPublicDashboardSnapshot();
 
-    return NextResponse.json(dashboard);
+    return NextResponse.json(dashboard, {
+      headers: {
+        "Cache-Control": "public, max-age=30, stale-while-revalidate=120"
+      }
+    });
   } catch (error) {
     return handleRouteError(error);
   }

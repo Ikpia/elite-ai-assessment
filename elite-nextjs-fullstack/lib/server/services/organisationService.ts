@@ -14,6 +14,30 @@ import {
 } from "../utils/organisationIdentity";
 import { roundToOneDecimal } from "../utils/rounding";
 
+interface PublicDashboardSnapshot {
+  summary: {
+    participatingFirms: number;
+    totalSubmissions: number;
+    averageScore: number;
+    highestAverageScore: number | null;
+  };
+  sectors: Array<{
+    firmType: FirmType;
+    organisationCount: number;
+    totalSubmissions: number;
+    averageScore: number;
+  }>;
+  organisations: Array<{
+    id: string;
+    orgName: string;
+    firmType: FirmType;
+    submissionCount: number;
+    averageScore: number;
+    createdAt: string;
+  }>;
+  generatedAt: string;
+}
+
 interface AggregatePipelineResult {
   _id: string;
   submissionCount: number;
@@ -150,6 +174,20 @@ const PUBLIC_DASHBOARD_FIRM_TYPES: FirmType[] = [
   "consulting-firms",
   "smes"
 ];
+const PUBLIC_DASHBOARD_CACHE_TTL_MS = 30_000;
+
+let publicDashboardSnapshotCache:
+  | { expiresAt: number; snapshot: PublicDashboardSnapshot }
+  | null = null;
+let publicDashboardSnapshotPromise: Promise<PublicDashboardSnapshot> | null = null;
+// Bump this on invalidation so stale in-flight reads cannot repopulate the cache.
+let publicDashboardSnapshotGeneration = 0;
+
+export function invalidatePublicDashboardSnapshotCache(): void {
+  publicDashboardSnapshotCache = null;
+  publicDashboardSnapshotGeneration += 1;
+  publicDashboardSnapshotPromise = null;
+}
 
 export async function ensureOrganisationExists(
   organisationKey: string,
@@ -216,6 +254,7 @@ export async function refreshOrganisationAggregation(
   );
 
   await organisation.save();
+  invalidatePublicDashboardSnapshotCache();
 
   return {
     organisationId: organisation.id,
@@ -270,37 +309,33 @@ export async function getOrganisationStatusById(orgId: string): Promise<{
 export async function listOrganisationDashboards(): Promise<
   OrganisationDashboardItem[]
 > {
-  const organisations = await OrganisationModel.find().sort({ createdAt: -1 }).lean();
-  const counts = await countSubmissionsByDomain();
+  const [organisations, counts] = await Promise.all([
+    OrganisationModel.find(
+      {},
+      {
+        domain: 1,
+        firmType: 1,
+        orgName: 1,
+        directorEmail: 1,
+        expectedRespondents: 1,
+        status: 1,
+        aggregatedScores: 1,
+        reportSentAt: 1,
+        createdAt: 1,
+        updatedAt: 1
+      }
+    )
+      .sort({ createdAt: -1 })
+      .lean(),
+    countSubmissionsByDomain()
+  ]);
 
   return organisations.map((organisation) =>
     toDashboardItem(organisation, counts.get(organisation.domain) || 0)
   );
 }
 
-export async function getPublicDashboardSnapshot(): Promise<{
-  summary: {
-    participatingFirms: number;
-    totalSubmissions: number;
-    averageScore: number;
-    highestAverageScore: number | null;
-  };
-  sectors: Array<{
-    firmType: FirmType;
-    organisationCount: number;
-    totalSubmissions: number;
-    averageScore: number;
-  }>;
-  organisations: Array<{
-    id: string;
-    orgName: string;
-    firmType: FirmType;
-    submissionCount: number;
-    averageScore: number;
-    createdAt: string;
-  }>;
-  generatedAt: string;
-}> {
+export async function getPublicDashboardSnapshot(): Promise<PublicDashboardSnapshot> {
   const organisations = await listOrganisationDashboards();
   const participatingOrganisations = organisations
     .filter((organisation) => organisation.submissionCount > 0)
@@ -378,6 +413,41 @@ export async function getPublicDashboardSnapshot(): Promise<{
   };
 }
 
+export async function getCachedPublicDashboardSnapshot(): Promise<PublicDashboardSnapshot> {
+  const now = Date.now();
+
+  if (publicDashboardSnapshotCache && publicDashboardSnapshotCache.expiresAt > now) {
+    return publicDashboardSnapshotCache.snapshot;
+  }
+
+  if (publicDashboardSnapshotPromise) {
+    return publicDashboardSnapshotPromise;
+  }
+
+  const generation = publicDashboardSnapshotGeneration;
+  const promise = (async () => {
+    const snapshot = await getPublicDashboardSnapshot();
+
+    if (generation === publicDashboardSnapshotGeneration) {
+      publicDashboardSnapshotCache = {
+        snapshot,
+        expiresAt: Date.now() + PUBLIC_DASHBOARD_CACHE_TTL_MS
+      };
+    }
+
+    return snapshot;
+  })();
+  publicDashboardSnapshotPromise = promise;
+
+  try {
+    return await promise;
+  } finally {
+    if (publicDashboardSnapshotPromise === promise) {
+      publicDashboardSnapshotPromise = null;
+    }
+  }
+}
+
 export async function updateOrganisationAdminSettings(
   orgId: string,
   updates: {
@@ -453,6 +523,7 @@ export async function updateOrganisationAdminSettings(
   );
 
   await organisation.save();
+  invalidatePublicDashboardSnapshotCache();
 
   return toDashboardItem(organisation.toObject(), submissionCount);
 }
