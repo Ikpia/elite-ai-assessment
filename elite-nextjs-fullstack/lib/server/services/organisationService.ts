@@ -1,6 +1,7 @@
 import { OrganisationModel } from "../models/organisation";
 import { SubmissionModel } from "../models/submission";
 import { ZERO_AGGREGATE_SCORES } from "../constants/assessment";
+import { env } from "../config/env";
 import type {
   AggregateScores,
   FirmType,
@@ -20,6 +21,10 @@ interface PublicDashboardSnapshot {
     totalSubmissions: number;
     averageScore: number;
     highestAverageScore: number | null;
+  };
+  benchmarks: {
+    localScore: number;
+    globalScore: number;
   };
   sectors: Array<{
     firmType: FirmType;
@@ -406,6 +411,10 @@ export async function getPublicDashboardSnapshot(): Promise<PublicDashboardSnaps
       totalSubmissions,
       averageScore,
       highestAverageScore
+    },
+    benchmarks: {
+      localScore: env.reportBenchmarkLocal,
+      globalScore: env.reportBenchmarkGlobal
     },
     sectors,
     organisations: participatingOrganisations,

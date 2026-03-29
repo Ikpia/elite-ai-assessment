@@ -101,8 +101,14 @@ export interface PublicDashboardSummary {
   highestAverageScore: number | null;
 }
 
+export interface PublicDashboardBenchmarks {
+  localScore: number;
+  globalScore: number;
+}
+
 export interface PublicDashboardResponse {
   summary: PublicDashboardSummary;
+  benchmarks: PublicDashboardBenchmarks;
   sectors: PublicDashboardSector[];
   organisations: PublicDashboardOrganisation[];
   generatedAt: string;
