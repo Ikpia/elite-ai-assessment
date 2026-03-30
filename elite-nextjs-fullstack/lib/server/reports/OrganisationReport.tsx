@@ -213,6 +213,9 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderBottom: "1 solid #e2e8f0"
   },
+  tableRowLast: {
+    borderBottom: "0 solid transparent"
+  },
   nameColumn: {
     flex: 2.4,
     paddingRight: 8
@@ -608,10 +611,7 @@ export function OrganisationReport({
                 return (
                   <View
                     key={`${respondent.respondentName}-${respondentIndex}`}
-                    style={[
-                      styles.tableRowRecord,
-                      isLastRow ? { borderBottom: "0 solid transparent" } : null
-                    ]}
+                    style={isLastRow ? [styles.tableRowRecord, styles.tableRowLast] : styles.tableRowRecord}
                   >
                     <View style={styles.nameColumn}>
                       <Text style={styles.respondentName}>{respondent.respondentName}</Text>
