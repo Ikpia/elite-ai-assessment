@@ -2935,8 +2935,7 @@ export function AssessmentShell() {
                       Admin Login
                     </h2>
                     <p className="max-w-2xl text-[0.98rem] leading-7 text-slate-500 sm:text-[1.04rem]">
-                      Enter your admin email to access the correct admin dashboard.
-                      Elite Global AI admins receive full platform access, while firm
+                      Enter your admin email to access the correct admin dashboard. Firm
                       admins only see their own organisation.
                     </p>
                   </div>
