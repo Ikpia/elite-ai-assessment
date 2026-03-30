@@ -24,7 +24,6 @@ import {
   Mail,
   Menu,
   Send,
-  ShieldCheck,
   Users,
   Youtube,
   X
@@ -1253,6 +1252,39 @@ export function AssessmentShell() {
     setAdminNotice("");
   };
 
+  const isPrimaryRouteActive = (key: "home" | "dashboard" | "start") => {
+    if (key === "home") {
+      return isLandingSurface;
+    }
+
+    if (key === "dashboard") {
+      return route.name === "dashboard";
+    }
+
+    return route.name === "start";
+  };
+
+  const primaryNavItems = [
+    {
+      key: "home" as const,
+      label: "Home",
+      description: "Return to the landing page",
+      action: () => navigate("/")
+    },
+    {
+      key: "dashboard" as const,
+      label: "Dashboard",
+      description: "View public benchmark results",
+      action: () => navigate("/dashboard")
+    },
+    {
+      key: "start" as const,
+      label: "Start Assessment",
+      description: "Open the respondent entry flow",
+      action: () => navigate("/start")
+    }
+  ].filter((item) => !isPrimaryRouteActive(item.key));
+
   const renderTopNav = () => {
     const sharedButtonClasses =
       "rounded-full bg-stone-900 px-5 py-2 text-white shadow-sm transition-colors hover:bg-stone-800";
@@ -1311,15 +1343,15 @@ export function AssessmentShell() {
     return (
       <>
         <div className="hidden items-center gap-4 text-sm font-medium tracking-wide text-stone-600 md:flex">
-          <button onClick={() => navigate("/")} className="uppercase">
-            Home
-          </button>
-          <button onClick={() => navigate("/dashboard")} className="uppercase">
-            Dashboard
-          </button>
-          <button onClick={() => navigate("/start")} className="uppercase">
-            Start
-          </button>
+          {primaryNavItems.map((item) => (
+            <button
+              key={item.key}
+              onClick={item.action}
+              className="uppercase"
+            >
+              {item.key === "start" ? "Start" : item.label}
+            </button>
+          ))}
         </div>
         <button className="p-2 md:hidden" onClick={() => setMenuOpen((current) => !current)}>
           {menuOpen ? <X /> : <Menu />}
@@ -1354,13 +1386,9 @@ export function AssessmentShell() {
           </div>
 
           <div className="grid gap-3">
-            {[
-              { label: "Home", description: "Return to the landing page", action: () => navigate("/") },
-              { label: "Dashboard", description: "View public benchmark results", action: () => navigate("/dashboard") },
-              { label: "Start Assessment", description: "Open the respondent entry flow", action: () => navigate("/start") }
-            ].map((item) => (
+            {primaryNavItems.map((item) => (
               <button
-                key={item.label}
+                key={item.key}
                 type="button"
                 onClick={() => {
                   setMenuOpen(false);
@@ -1548,7 +1576,8 @@ export function AssessmentShell() {
     const topFirm = publicDashboard?.organisations[0] || null;
     const systemAverageScore = publicDashboard?.summary.averageScore ?? 0;
     const benchmarkTargetScore = publicDashboard?.benchmarks.globalScore ?? 68;
-    const localBaselineScore = publicDashboard?.benchmarks.localScore ?? 31;
+    const chartFirmCount = publicDashboard?.organisations.length ?? 0;
+    const chartMinWidthRem = Math.max(chartFirmCount * 8, 46);
     const glassPanelClasses =
       "relative overflow-hidden rounded-[30px] border border-white/62 bg-transparent backdrop-blur-[46px] shadow-[0_26px_84px_rgba(15,23,42,0.10),0_8px_24px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.72)]";
     const glassCardClasses =
@@ -1557,6 +1586,9 @@ export function AssessmentShell() {
       "border border-white/56 bg-transparent backdrop-blur-[34px] shadow-[0_16px_40px_rgba(15,23,42,0.07),0_6px_16px_rgba(15,23,42,0.03),inset_0_1px_0_rgba(255,255,255,0.66)]";
     const glassPillClasses =
       "rounded-full border border-white/64 bg-transparent shadow-[0_10px_20px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-[26px]";
+    const chartBarGradient = "from-sky-400 via-blue-500 to-indigo-500";
+    const chartLineLabelClasses =
+      "absolute right-0 rounded-full border border-white/70 bg-[#dbe6f4]/95 px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-600 shadow-[0_10px_22px_rgba(15,23,42,0.08)] backdrop-blur-xl";
     const summaryCards = [
       {
         label: "Firms Took the Test",
@@ -1852,11 +1884,12 @@ export function AssessmentShell() {
                       Benchmark Comparison
                     </p>
                     <h2 className="mt-2 font-serif text-[1.8rem] font-medium tracking-tight text-slate-950">
-                      Average score per firm vs system benchmark
+                      Firm average scores vs global benchmark
                     </h2>
                     <p className="mt-3 text-sm leading-6 text-slate-500">
-                      Each row compares a firm&apos;s average readiness score against the
-                      live system average and the benchmark target used by the platform.
+                      Each bar shows a firm&apos;s average readiness score. The reference
+                      lines show the live system-wide average and the global benchmark used
+                      in the reporting model.
                     </p>
                   </div>
 
@@ -1866,177 +1899,238 @@ export function AssessmentShell() {
                       Firm Average
                     </span>
                     <span className={`${glassPillClasses} inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-600`}>
-                      <span className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-slate-400 via-slate-500 to-slate-600" />
-                      System {formatScoreValue(systemAverageScore)}/100
+                      <span className="h-[3px] w-5 rounded-full bg-slate-600" />
+                      Average {formatScoreValue(systemAverageScore)}/100
                     </span>
                     <span className={`${glassPillClasses} inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-600`}>
-                      <span className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-amber-300 via-amber-400 to-yellow-500" />
-                      Benchmark {formatScoreValue(benchmarkTargetScore)}/100
-                    </span>
-                    <span className={`${glassPillClasses} inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-600`}>
-                      <ShieldCheck className="h-3.5 w-3.5 text-blue-700" />
-                      Baseline {formatScoreValue(localBaselineScore)}/100
+                      <span className="h-[3px] w-5 rounded-full bg-amber-500" />
+                      Global Benchmark {formatScoreValue(benchmarkTargetScore)}/100
                     </span>
                   </div>
                 </div>
 
                 {publicDashboard.organisations.length ? (
                   <div className="space-y-5">
-                    <div className={`${glassInsetClasses} overflow-hidden rounded-[28px] p-4 sm:p-6`}>
-                      <div
-                        className="grid gap-4"
-                        style={{
-                          gridTemplateColumns: "repeat(auto-fit, minmax(13rem, 1fr))"
-                        }}
-                      >
+                    <div className={`${glassCardClasses} overflow-hidden p-4 sm:p-6`}>
+                      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                        <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                          The chart spreads all participating firms across one view and
+                          keeps the benchmark lines fixed for direct comparison.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <span className={`${glassPillClasses} inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-600`}>
+                            <BarChart3 className="h-3.5 w-3.5" />
+                            {publicDashboard.organisations.length} firms plotted
+                          </span>
+                          <span className={`${glassPillClasses} inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-600`}>
+                            <span className="h-[3px] w-5 rounded-full bg-slate-600" />
+                            Average {formatScoreValue(systemAverageScore)}
+                          </span>
+                          <span className={`${glassPillClasses} inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-600`}>
+                            <span className="h-[3px] w-5 rounded-full bg-amber-500" />
+                            Global {formatScoreValue(benchmarkTargetScore)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 md:hidden">
                         {publicDashboard.organisations.map((organisation, index) => {
                           const tone = getScoreTone(organisation.averageScore);
-                          const benchmarkGap = organisation.averageScore - benchmarkTargetScore;
-                          const comparisonBars = [
-                            {
-                              label: "Firm",
-                              value: organisation.averageScore,
-                              gradient: "from-blue-500 via-blue-600 to-indigo-600"
-                            },
-                            {
-                              label: "System",
-                              value: systemAverageScore,
-                              gradient: "from-slate-400 via-slate-500 to-slate-600"
-                            },
-                            {
-                              label: "Target",
-                              value: benchmarkTargetScore,
-                              gradient: "from-amber-300 via-amber-400 to-yellow-500"
-                            }
-                          ];
+                          const benchmarkGap =
+                            organisation.averageScore - benchmarkTargetScore;
 
                           return (
                             <motion.div
-                              key={`${organisation.id}-bar-group`}
-                              initial={{ opacity: 0, y: 16 }}
+                              key={`${organisation.id}-mobile-chart`}
+                              initial={{ opacity: 0, y: 14 }}
                               animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: index * 0.04, duration: 0.28 }}
-                              whileHover={{ y: -3 }}
-                              className={`${glassCardClasses} p-4`}
+                              transition={{ delay: 0.04 + index * 0.04, duration: 0.28 }}
+                              className={`${glassInsetClasses} rounded-[24px] p-4`}
                             >
-                              <div className="mb-4 flex min-h-[4.25rem] flex-col items-start justify-end">
-                                <span className={`rounded-full border px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.16em] ${tone.badge}`}>
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p
+                                    title={organisation.orgName}
+                                    className="truncate font-serif text-[1.12rem] text-slate-950"
+                                  >
+                                    {organisation.orgName}
+                                  </p>
+                                  <p className="mt-1 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
+                                    {getFirmTypeLabel(organisation.firmType)}
+                                  </p>
+                                </div>
+                                <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.16em] ${tone.badge}`}>
                                   {getReadinessLabel(organisation.averageScore)}
                                 </span>
-                                <p
-                                  title={organisation.orgName}
-                                  className="mt-2 w-full truncate font-serif text-[1rem] font-medium text-slate-950"
-                                >
-                                  {organisation.orgName}
-                                </p>
-                                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                                  {formatScoreDelta(benchmarkGap)} vs benchmark
-                                </p>
                               </div>
 
-                              <div className="relative rounded-[20px] border border-white/24 bg-transparent px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] backdrop-blur-[28px]">
-                                <div className="pointer-events-none absolute inset-x-3 bottom-9 top-3">
-                                  {[25, 50, 75, 100].map((tick) => (
-                                    <div
-                                      key={`${organisation.id}-tick-${tick}`}
-                                      className="absolute inset-x-0 border-t border-dashed border-white/20"
-                                      style={{ bottom: `${tick}%` }}
-                                    />
-                                  ))}
+                              <div className="mt-4">
+                                <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-slate-600">
+                                  <span>{formatScoreValue(organisation.averageScore)}/100</span>
+                                  <span>{formatScoreDelta(benchmarkGap)} vs global</span>
                                 </div>
-
-                                <div className="relative z-10 flex h-[15rem] items-end justify-center gap-2">
-                                  {comparisonBars.map((bar) => (
-                                    <div
-                                      key={`${organisation.id}-${bar.label}`}
-                                      className="flex h-full flex-1 flex-col items-center justify-end gap-2"
-                                    >
-                                      <span className="text-[10px] font-semibold text-slate-600">
-                                        {formatScoreValue(bar.value)}
-                                      </span>
-                                      <div className="flex h-full w-full items-end">
-                                        <motion.div
-                                          initial={{ height: 0 }}
-                                          animate={{ height: `${Math.max(bar.value, 3)}%` }}
-                                          transition={{
-                                            delay: 0.12 + index * 0.03,
-                                            duration: 0.6,
-                                            ease: [0.22, 1, 0.36, 1]
-                                          }}
-                                          className={`w-full rounded-t-[14px] bg-gradient-to-t ${bar.gradient} shadow-[0_14px_28px_rgba(15,23,42,0.12)]`}
-                                        />
-                                      </div>
-                                      <span className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
-                                        {bar.label}
-                                      </span>
-                                    </div>
-                                  ))}
+                                <div className="relative h-3 rounded-full bg-transparent ring-1 ring-white/35 backdrop-blur-md">
+                                  <div
+                                    className="absolute inset-y-[-4px] w-px bg-slate-600/80"
+                                    style={{
+                                      left: `${Math.max(0, Math.min(100, systemAverageScore))}%`
+                                    }}
+                                  />
+                                  <div
+                                    className="absolute inset-y-[-4px] w-px bg-amber-500"
+                                    style={{
+                                      left: `${Math.max(0, Math.min(100, benchmarkTargetScore))}%`
+                                    }}
+                                  />
+                                  <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{
+                                      width: `${Math.max(organisation.averageScore, 4)}%`
+                                    }}
+                                    transition={{
+                                      delay: 0.1 + index * 0.04,
+                                      duration: 0.56,
+                                      ease: [0.22, 1, 0.36, 1]
+                                    }}
+                                    className={`h-full rounded-full bg-gradient-to-r ${chartBarGradient}`}
+                                  />
                                 </div>
-                              </div>
-
-                              <div className="mt-3 text-[11px] text-slate-500">
-                                {getFirmTypeLabel(organisation.firmType)}
+                                <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                                  <span>Avg {formatScoreValue(systemAverageScore)}</span>
+                                  <span>Global {formatScoreValue(benchmarkTargetScore)}</span>
+                                  <span>{organisation.submissionCount} responses</span>
+                                </div>
                               </div>
                             </motion.div>
                           );
                         })}
                       </div>
+
+                      <div className="hidden md:block">
+                        <div className="overflow-x-auto pb-2">
+                          <div
+                            className="min-w-full"
+                            style={{ minWidth: `${chartMinWidthRem}rem` }}
+                          >
+                            <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-4 lg:gap-6">
+                              <div className="relative h-[22rem]">
+                                {[0, 25, 50, 75, 100].map((tick) => (
+                                  <div
+                                    key={`firm-chart-axis-${tick}`}
+                                    className="absolute right-0 text-[11px] font-semibold text-slate-500"
+                                    style={{ bottom: `${tick}%`, transform: "translateY(50%)" }}
+                                  >
+                                    {tick}
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="relative rounded-[28px] border border-white/28 bg-transparent px-4 pb-5 pt-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.28)] backdrop-blur-[28px] lg:px-5">
+                                <div className="pointer-events-none absolute inset-x-4 bottom-5 top-6 lg:inset-x-5">
+                                  {[0, 25, 50, 75, 100].map((tick) => (
+                                    <div
+                                      key={`firm-chart-grid-${tick}`}
+                                      className="absolute inset-x-0 border-t border-dashed border-white/18"
+                                      style={{ bottom: `${tick}%` }}
+                                    />
+                                  ))}
+
+                                  <div
+                                    className="absolute inset-x-0 border-t border-slate-600/70"
+                                    style={{
+                                      bottom: `${Math.max(0, Math.min(100, systemAverageScore))}%`
+                                    }}
+                                  >
+                                    <span className={`${chartLineLabelClasses} -translate-y-[135%]`}>
+                                      Average {formatScoreValue(systemAverageScore)}
+                                    </span>
+                                  </div>
+
+                                  <div
+                                    className="absolute inset-x-0 border-t border-amber-500/90"
+                                    style={{
+                                      bottom: `${Math.max(0, Math.min(100, benchmarkTargetScore))}%`
+                                    }}
+                                  >
+                                    <span className={`${chartLineLabelClasses} -translate-y-[135%]`}>
+                                      Global {formatScoreValue(benchmarkTargetScore)}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div
+                                  className="relative z-10 grid h-[22rem] items-end gap-4"
+                                  style={{
+                                    gridTemplateColumns: `repeat(${Math.max(publicDashboard.organisations.length, 1)}, minmax(5.5rem, 1fr))`
+                                  }}
+                                >
+                                  {publicDashboard.organisations.map((organisation, index) => {
+                                    const labelBottom = Math.min(
+                                      Math.max(organisation.averageScore, 3),
+                                      92
+                                    );
+
+                                    return (
+                                      <div
+                                        key={`${organisation.id}-desktop-chart`}
+                                        className="flex h-full min-w-0 flex-col justify-end"
+                                      >
+                                        <div className="relative flex h-full items-end justify-center">
+                                          <motion.div
+                                            initial={{ height: 0 }}
+                                            animate={{
+                                              height: `${Math.max(organisation.averageScore, 3)}%`
+                                            }}
+                                            transition={{
+                                              delay: 0.08 + index * 0.03,
+                                              duration: 0.62,
+                                              ease: [0.22, 1, 0.36, 1]
+                                            }}
+                                            className={`w-full max-w-[5.75rem] rounded-t-[20px] bg-gradient-to-t ${chartBarGradient} shadow-[0_16px_36px_rgba(15,23,42,0.16)]`}
+                                          />
+                                          <span
+                                            className="absolute left-1/2 -translate-x-1/2 text-[11px] font-semibold text-slate-700"
+                                            style={{
+                                              bottom: `calc(${labelBottom}% + 0.55rem)`
+                                            }}
+                                          >
+                                            {formatScoreValue(organisation.averageScore)}
+                                          </span>
+                                        </div>
+
+                                        <div className="mt-4 text-center">
+                                          <p
+                                            title={organisation.orgName}
+                                            className="truncate text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-600"
+                                          >
+                                            {organisation.orgName}
+                                          </p>
+                                          <p className="mt-1 text-[10px] text-slate-500">
+                                            {formatScoreDelta(
+                                              organisation.averageScore - benchmarkTargetScore
+                                            )}{" "}
+                                            vs global
+                                          </p>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <div className={`${glassInsetClasses} rounded-[22px] p-4`}>
-                        <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
-                          System Average
-                        </p>
-                        <p className="mt-3 font-serif text-[1.9rem] text-slate-950">
-                          {formatScoreValue(systemAverageScore)}/100
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-slate-500">
-                          Current mean score across all participating firms.
-                        </p>
-                      </div>
-                      <div className={`${glassInsetClasses} rounded-[22px] p-4`}>
-                        <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
-                          Benchmark Target
-                        </p>
-                        <p className="mt-3 font-serif text-[1.9rem] text-slate-950">
-                          {formatScoreValue(benchmarkTargetScore)}/100
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-slate-500">
-                          Current target used by the platform for comparison.
-                        </p>
-                      </div>
-                      <div className={`${glassInsetClasses} rounded-[22px] p-4`}>
-                        <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
-                          Local Baseline
-                        </p>
-                        <p className="mt-3 font-serif text-[1.9rem] text-slate-950">
-                          {formatScoreValue(localBaselineScore)}/100
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-slate-500">
-                          Regional baseline shown alongside the reporting system.
-                        </p>
-                      </div>
-                      <div className={`${glassInsetClasses} rounded-[22px] p-4`}>
-                        <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
-                          Coverage
-                        </p>
-                        <p className="mt-3 font-serif text-[1.9rem] text-slate-950">
-                          {publicDashboard.organisations.length} firms
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-slate-500">
-                          Ranked by firm average, then submission depth.
-                        </p>
-                      </div>
-                    </div>
                   </div>
                 ) : (
                   <div className={`${glassInsetClasses} flex min-h-[14rem] items-center justify-center rounded-[28px] border-dashed text-center`}>
                     <div className="max-w-md px-6">
                       <p className="font-serif text-2xl text-slate-900">No firm comparison data yet</p>
                       <p className="mt-3 text-sm leading-7 text-slate-500">
-                        As soon as firms submit their assessments, this chart will compare
-                        each average score with the live system average and benchmark target.
+                        As soon as firms submit their assessments, this chart will plot
+                        every firm against the live average and the global benchmark.
                       </p>
                     </div>
                   </div>
@@ -2966,15 +3060,16 @@ export function AssessmentShell() {
                   Navigate
                 </p>
                 <div className="flex flex-col gap-3 text-sm">
-                  <button type="button" onClick={() => navigate("/")} className="text-left font-medium text-slate-200">
-                    Home
-                  </button>
-                  <button type="button" onClick={() => navigate("/dashboard")} className="text-left font-medium text-slate-200">
-                    Public Dashboard
-                  </button>
-                  <button type="button" onClick={() => navigate("/start")} className="text-left font-medium text-slate-200">
-                    Start Assessment
-                  </button>
+                  {primaryNavItems.map((item) => (
+                    <button
+                      key={`footer-${item.key}`}
+                      type="button"
+                      onClick={item.action}
+                      className="text-left font-medium text-slate-200"
+                    >
+                      {item.key === "dashboard" ? "Public Dashboard" : item.label}
+                    </button>
+                  ))}
                   <a href={MARKETING_SITE_URL} target="_blank" rel="noreferrer" className="font-medium text-slate-200">
                     eliteglobalai.com
                   </a>

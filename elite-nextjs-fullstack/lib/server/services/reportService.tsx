@@ -12,7 +12,8 @@ import type {
   AggregateScores,
   DimensionInsight,
   DimensionKey,
-  ReportData
+  ReportData,
+  ReportRespondentScore
 } from "../types/assessment";
 import { HttpError } from "../utils/httpError";
 import { roundToOneDecimal } from "../utils/rounding";
@@ -37,6 +38,30 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+function buildRespondentScores(
+  submissions: Array<{
+    respondentName: string;
+    respondentRole: ReportRespondentScore["respondentRole"];
+    respondentDept: string;
+    totalScore: number;
+  }>
+): ReportRespondentScore[] {
+  return [...submissions]
+    .sort(
+      (left, right) =>
+        left.respondentName.localeCompare(right.respondentName, "en", {
+          sensitivity: "base"
+        }) || right.totalScore - left.totalScore
+    )
+    .map((submission) => ({
+      respondentName: submission.respondentName,
+      respondentRole: submission.respondentRole,
+      respondentDept: submission.respondentDept,
+      totalScore: submission.totalScore,
+      readinessLevel: getReadinessLevel(submission.totalScore)
+    }));
+}
+
 export async function buildReportData(orgId: string): Promise<ReportData> {
   const organisation = await OrganisationModel.findById(orgId);
 
@@ -44,9 +69,25 @@ export async function buildReportData(orgId: string): Promise<ReportData> {
     throw new HttpError(404, "Organisation not found.");
   }
 
-  const submittedRespondents = await SubmissionModel.countDocuments({
+  const submissions = await SubmissionModel.find({
     orgDomain: organisation.domain
-  });
+  })
+    .select({
+      respondentName: 1,
+      respondentRole: 1,
+      respondentDept: 1,
+      totalScore: 1
+    })
+    .lean<
+      Array<{
+        respondentName: string;
+        respondentRole: ReportRespondentScore["respondentRole"];
+        respondentDept: string;
+        totalScore: number;
+      }>
+    >();
+
+  const submittedRespondents = submissions.length;
 
   if (submittedRespondents === 0) {
     throw new HttpError(400, "A report cannot be generated before responses exist.");
@@ -86,7 +127,8 @@ export async function buildReportData(orgId: string): Promise<ReportData> {
       organisation.aggregatedScores.total - env.reportBenchmarkGlobal
     ),
     strongestDimension,
-    weakestDimensions
+    weakestDimensions,
+    respondents: buildRespondentScores(submissions)
   };
 }
 

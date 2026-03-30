@@ -181,6 +181,78 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 9,
     color: "#64748b"
+  },
+  respondentDescription: {
+    color: "#475569",
+    marginBottom: 12,
+    lineHeight: 1.4
+  },
+  tableWrap: {
+    border: "1 solid #dbeafe",
+    borderRadius: 8,
+    overflow: "hidden"
+  },
+  tableHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#eff6ff",
+    borderBottom: "1 solid #dbeafe",
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  tableHeaderText: {
+    fontSize: 9,
+    fontWeight: 700,
+    color: "#475569",
+    textTransform: "uppercase"
+  },
+  tableRowRecord: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderBottom: "1 solid #e2e8f0"
+  },
+  nameColumn: {
+    flex: 2.4,
+    paddingRight: 8
+  },
+  roleColumn: {
+    flex: 1.1,
+    paddingRight: 8
+  },
+  scoreColumn: {
+    width: 64,
+    paddingRight: 8
+  },
+  readinessColumn: {
+    flex: 1.45
+  },
+  respondentName: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: "#0f172a"
+  },
+  respondentMeta: {
+    marginTop: 2,
+    fontSize: 9,
+    color: "#64748b"
+  },
+  cellText: {
+    fontSize: 10,
+    color: "#1e293b"
+  },
+  scoreTextRight: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: "#0f172a",
+    textAlign: "right"
+  },
+  tableFooterNote: {
+    marginTop: 10,
+    fontSize: 9,
+    color: "#64748b",
+    lineHeight: 1.4
   }
 });
 
@@ -216,6 +288,28 @@ function buildDimensionChartData(data: ReportData): DimensionChartItem[] {
     color: DIMENSION_COLORS[index],
     percentage: total > 0 ? (data.aggregatedScores[key] / total) * 100 : 0
   }));
+}
+
+function formatRoleLabel(role: ReportData["respondents"][number]["respondentRole"]): string {
+  if (role === "c-suite") {
+    return "C-Suite";
+  }
+
+  if (role === "ic") {
+    return "Individual Contributor";
+  }
+
+  return "Manager";
+}
+
+function chunkItems<T>(items: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+
+  return chunks;
 }
 
 function polarToCartesian(
@@ -330,6 +424,7 @@ export function OrganisationReport({
   data: ReportData;
 }) {
   const chartItems = buildDimensionChartData(data);
+  const respondentPages = chunkItems(data.respondents, 12);
 
   return (
     <Document>
@@ -466,6 +561,90 @@ export function OrganisationReport({
           </Text>
         </View>
       </Page>
+
+      {respondentPages.map((respondents, pageIndex) => (
+        <Page key={`respondent-page-${pageIndex + 1}`} size="A4" style={styles.page}>
+          <View style={styles.chartPageHeader}>
+            <Text style={styles.eyebrow}>Elite Global AI</Text>
+            <Text style={styles.title}>
+              {pageIndex === 0
+                ? "Respondent Score Roster"
+                : "Respondent Score Roster (Continued)"}
+            </Text>
+            <Text style={styles.subtitle}>
+              Named submission-level scores for {data.orgName}.
+            </Text>
+          </View>
+
+          <View style={styles.chartCard}>
+            {pageIndex === 0 ? (
+              <Text style={styles.respondentDescription}>
+                This section lists individual respondents and their assessment scores for
+                internal review alongside the organisation-level summary.
+              </Text>
+            ) : null}
+
+            <View style={styles.tableWrap}>
+              <View style={styles.tableHeader}>
+                <View style={styles.nameColumn}>
+                  <Text style={styles.tableHeaderText}>Respondent</Text>
+                </View>
+                <View style={styles.roleColumn}>
+                  <Text style={styles.tableHeaderText}>Role</Text>
+                </View>
+                <View style={styles.scoreColumn}>
+                  <Text style={styles.tableHeaderText}>Score</Text>
+                </View>
+                <View style={styles.readinessColumn}>
+                  <Text style={styles.tableHeaderText}>Readiness</Text>
+                </View>
+              </View>
+
+              {respondents.map((respondent, respondentIndex) => {
+                const isLastRow =
+                  pageIndex === respondentPages.length - 1 &&
+                  respondentIndex === respondents.length - 1;
+
+                return (
+                  <View
+                    key={`${respondent.respondentName}-${respondentIndex}`}
+                    style={[
+                      styles.tableRowRecord,
+                      isLastRow ? { borderBottom: "0 solid transparent" } : null
+                    ]}
+                  >
+                    <View style={styles.nameColumn}>
+                      <Text style={styles.respondentName}>{respondent.respondentName}</Text>
+                      <Text style={styles.respondentMeta}>{respondent.respondentDept}</Text>
+                    </View>
+                    <View style={styles.roleColumn}>
+                      <Text style={styles.cellText}>
+                        {formatRoleLabel(respondent.respondentRole)}
+                      </Text>
+                    </View>
+                    <View style={styles.scoreColumn}>
+                      <Text style={styles.scoreTextRight}>
+                        {respondent.totalScore}/100
+                      </Text>
+                    </View>
+                    <View style={styles.readinessColumn}>
+                      <Text style={styles.cellText}>{respondent.readinessLevel}</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+
+            {pageIndex === respondentPages.length - 1 ? (
+              <Text style={styles.tableFooterNote}>
+                Named respondent results are included for internal use. The organisation
+                summary pages remain the primary benchmark view for director-facing
+                discussion.
+              </Text>
+            ) : null}
+          </View>
+        </Page>
+      ))}
     </Document>
   );
 }

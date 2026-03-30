@@ -95,6 +95,14 @@ export interface DimensionInsight {
   recommendation: string;
 }
 
+export interface ReportRespondentScore {
+  respondentName: string;
+  respondentRole: RoleLevel;
+  respondentDept: string;
+  totalScore: number;
+  readinessLevel: ReadinessLevel;
+}
+
 export interface ReportData {
   organisationId: string;
   orgName: string;
@@ -114,6 +122,7 @@ export interface ReportData {
   benchmarkGapGlobal: number;
   strongestDimension: DimensionInsight;
   weakestDimensions: DimensionInsight[];
+  respondents: ReportRespondentScore[];
 }
 
 export interface OrganisationDashboardItem {
