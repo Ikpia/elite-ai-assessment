@@ -26,10 +26,10 @@ export async function POST(
 ) {
   try {
     await ensureServerInitialized();
-    requireAdmin(request.headers);
 
     const params = await context.params;
     const orgId = assertValidObjectId(params.orgId, "organisation id");
+    await requireAdmin(request.headers, { organisationId: orgId });
     const body = await request.json();
     const parsedBody = parseSendReportBody(body);
     const organisation = await getOrganisationStatusById(orgId);

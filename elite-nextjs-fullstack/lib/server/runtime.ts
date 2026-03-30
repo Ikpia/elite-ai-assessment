@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 
 import { env } from "@/lib/server/config/env";
 import { connectToDatabase } from "@/lib/server/config/db";
+import { OrganisationModel } from "@/lib/server/models/organisation";
 import { HttpError } from "@/lib/server/utils/httpError";
+import { verifyAdminSessionToken } from "@/lib/server/utils/adminAccess";
 import { backfillFirmTypes } from "@/lib/server/services/firmTypeMigrationService";
 import { syncOrganisationIdentityFromNames } from "@/lib/server/services/organisationIdentityMigrationService";
 
@@ -47,7 +49,14 @@ export async function ensureServerInitialized(): Promise<void> {
   return globalThis.__eliteNextServerInitializedPromise__;
 }
 
-export function requireAdmin(headers: Headers): void {
+export type AdminAccessContext =
+  | { type: "super-admin" }
+  | { type: "organisation-admin"; organisationId: string; directorEmail: string };
+
+export async function requireAdmin(
+  headers: Headers,
+  options: { organisationId?: string } = {}
+): Promise<AdminAccessContext> {
   const authorizationHeader = headers.get("authorization");
   const bearerSecret = authorizationHeader?.startsWith("Bearer ")
     ? authorizationHeader.slice("Bearer ".length).trim()
@@ -56,8 +65,46 @@ export function requireAdmin(headers: Headers): void {
   const providedSecret = bearerSecret || headerSecret;
 
   if (!providedSecret || providedSecret !== env.adminSecret) {
-    throw new HttpError(401, "Admin authentication failed.");
+    const sessionToken = headers.get("x-admin-session")?.trim() || null;
+
+    if (!sessionToken) {
+      throw new HttpError(401, "Admin authentication failed.");
+    }
+
+    const payload = verifyAdminSessionToken(sessionToken);
+
+    if (payload.scope === "super-admin") {
+      if (!env.superAdminEmails.includes(payload.email.toLowerCase())) {
+        throw new HttpError(401, "Admin authentication failed.");
+      }
+
+      return { type: "super-admin" };
+    }
+
+    const organisation = await OrganisationModel.findById(payload.organisationId, {
+      directorEmail: 1
+    }).lean();
+
+    if (!organisation || !organisation.directorEmail) {
+      throw new HttpError(401, "Firm admin authentication failed.");
+    }
+
+    if (organisation.directorEmail.toLowerCase() !== payload.directorEmail.toLowerCase()) {
+      throw new HttpError(401, "Firm admin authentication failed.");
+    }
+
+    if (options.organisationId && String(organisation._id) !== options.organisationId) {
+      throw new HttpError(403, "You can only access your own organisation.");
+    }
+
+    return {
+      type: "organisation-admin",
+      organisationId: String(organisation._id),
+      directorEmail: organisation.directorEmail
+    };
   }
+
+  return { type: "super-admin" };
 }
 
 export function handleRouteError(error: unknown): NextResponse {

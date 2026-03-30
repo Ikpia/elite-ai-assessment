@@ -17,10 +17,10 @@ export async function POST(
 ) {
   try {
     await ensureServerInitialized();
-    requireAdmin(request.headers);
 
     const params = await context.params;
     const orgId = assertValidObjectId(params.orgId, "organisation id");
+    await requireAdmin(request.headers, { organisationId: orgId });
     const { filename, buffer } = await generateOrganisationReportPdf(orgId);
     const pdfBytes = new Uint8Array(buffer);
 

@@ -83,6 +83,15 @@ const organisationSchema = new Schema<OrganisationDocument>(
 );
 
 organisationSchema.index({ createdAt: -1 });
+organisationSchema.index(
+  { directorEmail: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      directorEmail: { $type: "string" }
+    }
+  }
+);
 
 export const OrganisationModel =
   (models.Organisation as Model<OrganisationDocument> | undefined) ||

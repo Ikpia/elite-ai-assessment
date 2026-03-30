@@ -86,6 +86,55 @@ export function parseValidateEmailBody(body: unknown): { email: string } {
   };
 }
 
+export function parseAdminAccessRequestBody(body: unknown): { email: string } {
+  const payload = asRecord(body, "Request body");
+  return {
+    email: requireString(payload.email, "email")
+  };
+}
+
+export function parseOrganisationCreateBody(
+  body: unknown
+): {
+  orgName: string;
+  directorEmail: string;
+  firmType: FirmType;
+  expectedRespondents?: number | null;
+} {
+  const payload = asRecord(body, "Request body");
+  const parsed: {
+    orgName: string;
+    directorEmail: string;
+    firmType: FirmType;
+    expectedRespondents?: number | null;
+  } = {
+    orgName: requireString(payload.orgName, "orgName"),
+    directorEmail: requireString(payload.directorEmail, "directorEmail"),
+    firmType:
+      payload.firmType === undefined
+        ? "financial-services"
+        : parseFirmType(payload.firmType)
+  };
+
+  if (payload.expectedRespondents !== undefined) {
+    if (payload.expectedRespondents === null) {
+      parsed.expectedRespondents = null;
+    } else if (
+      Number.isInteger(payload.expectedRespondents) &&
+      Number(payload.expectedRespondents) > 0
+    ) {
+      parsed.expectedRespondents = Number(payload.expectedRespondents);
+    } else {
+      throw new HttpError(
+        400,
+        "expectedRespondents must be a positive integer or null."
+      );
+    }
+  }
+
+  return parsed;
+}
+
 export function parseSubmissionPayload(body: unknown): SubmissionPayload {
   const payload = asRecord(body, "Request body");
 

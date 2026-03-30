@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { updateOrganisationAdminSettings } from "@/lib/server/services/organisationService";
+import {
+  deleteOrganisationAndSubmissions,
+  updateOrganisationAdminSettings
+} from "@/lib/server/services/organisationService";
 import { parseOrganisationUpdateBody } from "@/lib/server/services/payloadValidators";
 import { validateCompanyEmail } from "@/lib/server/services/emailValidationService";
 import { HttpError } from "@/lib/server/utils/httpError";
@@ -20,10 +23,10 @@ export async function PATCH(
 ) {
   try {
     await ensureServerInitialized();
-    requireAdmin(request.headers);
 
     const params = await context.params;
     const orgId = assertValidObjectId(params.orgId, "organisation id");
+    await requireAdmin(request.headers, { organisationId: orgId });
     const body = await request.json();
     const updates = parseOrganisationUpdateBody(body);
 
@@ -45,6 +48,31 @@ export async function PATCH(
     return NextResponse.json({
       message: "Organisation settings updated.",
       organisation
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ orgId: string }> }
+) {
+  try {
+    await ensureServerInitialized();
+    const access = await requireAdmin(request.headers);
+
+    if (access.type !== "super-admin") {
+      throw new HttpError(403, "Only Elite Global AI admins can delete firms.");
+    }
+
+    const params = await context.params;
+    const orgId = assertValidObjectId(params.orgId, "organisation id");
+    const deleted = await deleteOrganisationAndSubmissions(orgId);
+
+    return NextResponse.json({
+      message: `Deleted ${deleted.orgName} and its submissions.`,
+      organisationId: deleted.organisationId
     });
   } catch (error) {
     return handleRouteError(error);

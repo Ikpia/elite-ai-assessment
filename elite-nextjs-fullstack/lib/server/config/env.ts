@@ -15,6 +15,19 @@ function getOptionalString(name: string): string | null {
   return value ? value : null;
 }
 
+function getStringList(name: string): string[] {
+  const value = getOptionalString(name);
+
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 function getNumber(name: string, fallback: number): number {
   const raw = process.env[name];
 
@@ -52,6 +65,7 @@ export const env = {
   resendApiKey: getOptionalString("RESEND_API_KEY"),
   resendFromEmail: getOptionalString("RESEND_FROM_EMAIL"),
   appBaseUrl: getOptionalString("APP_BASE_URL") || `http://localhost:${port}`,
+  superAdminEmails: getStringList("SUPER_ADMIN_EMAILS"),
   reportBenchmarkLocal: getNumber("REPORT_BENCHMARK_LOCAL", 31),
   reportBenchmarkGlobal: getNumber("REPORT_BENCHMARK_GLOBAL", 68)
 };

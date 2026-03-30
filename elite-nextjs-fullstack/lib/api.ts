@@ -6,6 +6,10 @@ interface ApiErrorPayload {
   details?: unknown;
 }
 
+export type AdminAuthCredential =
+  | { type: "secret"; value: string }
+  | { type: "token"; value: string };
+
 export class ApiError extends Error {
   public readonly status: number;
   public readonly details?: unknown;
@@ -45,10 +49,10 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   return payload as T;
 }
 
-export function getAdminHeaders(secret: string): HeadersInit {
-  return {
-    "x-admin-secret": secret
-  };
+export function getAdminHeaders(auth: AdminAuthCredential): HeadersInit {
+  return auth.type === "secret"
+    ? { "x-admin-secret": auth.value }
+    : { "x-admin-session": auth.value };
 }
 
 export async function apiBlobRequest(path: string, init?: RequestInit): Promise<Blob> {

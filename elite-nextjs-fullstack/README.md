@@ -40,6 +40,7 @@ PORT=3000
 NODE_ENV=development
 MONGODB_URI=mongodb://127.0.0.1:27017/elite-global-ai
 ADMIN_SECRET=replace-with-a-long-random-secret
+SUPER_ADMIN_EMAILS=admin@eliteglobalai.com
 ALLOW_PERSONAL_EMAIL_DOMAINS=true
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=reports@eliteglobalai.com

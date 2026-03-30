@@ -43,6 +43,15 @@ interface PublicDashboardSnapshot {
   generatedAt: string;
 }
 
+export type AdminAccessTarget =
+  | { type: "super-admin"; email: string }
+  | {
+      type: "organisation-admin";
+      organisationId: string;
+      orgName: string;
+      directorEmail: string;
+    };
+
 interface AggregatePipelineResult {
   _id: string;
   submissionCount: number;
@@ -52,6 +61,36 @@ interface AggregatePipelineResult {
   workflowAdoption: number;
   ethicsCompliance: number;
   total: number;
+}
+
+function isDuplicateKeyError(error: unknown): error is {
+  code: number;
+  keyPattern?: Record<string, unknown>;
+} {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === 11000
+  );
+}
+
+function toOrganisationDuplicateHttpError(error: unknown): HttpError {
+  const keyPattern =
+    isDuplicateKeyError(error) && error.keyPattern ? error.keyPattern : {};
+
+  if ("directorEmail" in keyPattern) {
+    return new HttpError(409, "Another organisation already uses that director email.");
+  }
+
+  if ("domain" in keyPattern) {
+    return new HttpError(
+      409,
+      "An organisation already uses that normalised organisation name."
+    );
+  }
+
+  return new HttpError(409, "Another organisation already uses that organisation name or director email.");
 }
 
 function deriveStatus(
@@ -340,6 +379,129 @@ export async function listOrganisationDashboards(): Promise<
   );
 }
 
+export async function getOrganisationDashboardById(
+  orgId: string
+): Promise<OrganisationDashboardItem> {
+  const organisation = await OrganisationModel.findById(
+    orgId,
+    {
+      domain: 1,
+      firmType: 1,
+      orgName: 1,
+      directorEmail: 1,
+      expectedRespondents: 1,
+      status: 1,
+      aggregatedScores: 1,
+      reportSentAt: 1,
+      createdAt: 1,
+      updatedAt: 1
+    }
+  ).lean();
+
+  if (!organisation) {
+    throw new HttpError(404, "Organisation not found.");
+  }
+
+  const submissionCount = await SubmissionModel.countDocuments({
+    orgDomain: organisation.domain
+  });
+
+  return toDashboardItem(organisation, submissionCount);
+}
+
+export async function createOrganisationAdminRecord(input: {
+  orgName: string;
+  directorEmail: string;
+  firmType: FirmType;
+  expectedRespondents?: number | null;
+}): Promise<OrganisationDashboardItem> {
+  const normalizedOrgName = normalizeOrganisationName(input.orgName);
+  const organisationKey = buildOrganisationKey(normalizedOrgName);
+  const normalizedDirectorEmail = input.directorEmail.toLowerCase();
+
+  if (env.superAdminEmails.includes(normalizedDirectorEmail)) {
+    throw new HttpError(
+      409,
+      "That email is reserved for Elite Global AI superadmin access."
+    );
+  }
+
+  const [existingOrganisation, conflictingOrganisation] = await Promise.all([
+    OrganisationModel.findOne({ domain: organisationKey }),
+    OrganisationModel.findOne({ directorEmail: normalizedDirectorEmail })
+  ]);
+
+  if (existingOrganisation) {
+    throw new HttpError(
+      409,
+      "An organisation already uses that normalised organisation name."
+    );
+  }
+
+  if (conflictingOrganisation) {
+    throw new HttpError(409, "Another organisation already uses that director email.");
+  }
+
+  try {
+    const organisation = await OrganisationModel.create({
+      domain: organisationKey,
+      firmType: input.firmType,
+      orgName: normalizedOrgName,
+      directorEmail: normalizedDirectorEmail,
+      expectedRespondents:
+        input.expectedRespondents === undefined ? null : input.expectedRespondents,
+      status: "collecting",
+      aggregatedScores: { ...ZERO_AGGREGATE_SCORES }
+    });
+    invalidatePublicDashboardSnapshotCache();
+    return toDashboardItem(organisation.toObject(), 0);
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      throw toOrganisationDuplicateHttpError(error);
+    }
+
+    throw error;
+  }
+}
+
+export async function resolveAdminAccessTargetByEmail(
+  email: string
+): Promise<AdminAccessTarget> {
+  const normalizedEmail = email.toLowerCase();
+
+  if (env.superAdminEmails.includes(normalizedEmail)) {
+    return {
+      type: "super-admin",
+      email: normalizedEmail
+    };
+  }
+
+  const organisations = await OrganisationModel.find(
+    { directorEmail: normalizedEmail },
+    { orgName: 1, directorEmail: 1 }
+  )
+    .limit(2)
+    .lean();
+
+  if (organisations.length === 0) {
+    throw new HttpError(404, "No organisation is configured for this director email.");
+  }
+
+  if (organisations.length > 1) {
+    throw new HttpError(
+      409,
+      "This director email is linked to multiple organisations. Contact support."
+    );
+  }
+
+  return {
+    type: "organisation-admin",
+    organisationId: String(organisations[0]._id),
+    orgName: organisations[0].orgName,
+    directorEmail: organisations[0].directorEmail || normalizedEmail
+  };
+}
+
 export async function getPublicDashboardSnapshot(): Promise<PublicDashboardSnapshot> {
   const organisations = await listOrganisationDashboards();
   const participatingOrganisations = organisations
@@ -514,7 +676,28 @@ export async function updateOrganisationAdminSettings(
   }
 
   if (updates.directorEmail !== undefined) {
-    organisation.directorEmail = updates.directorEmail.toLowerCase();
+    const normalizedDirectorEmail = updates.directorEmail.toLowerCase();
+
+    if (env.superAdminEmails.includes(normalizedDirectorEmail)) {
+      throw new HttpError(
+        409,
+        "That email is reserved for Elite Global AI superadmin access."
+      );
+    }
+
+    const conflictingOrganisation = await OrganisationModel.findOne({
+      directorEmail: normalizedDirectorEmail,
+      _id: { $ne: organisation._id }
+    });
+
+    if (conflictingOrganisation) {
+      throw new HttpError(
+        409,
+        "Another organisation already uses that director email."
+      );
+    }
+
+    organisation.directorEmail = normalizedDirectorEmail;
   }
 
   if (updates.expectedRespondents !== undefined) {
@@ -531,10 +714,38 @@ export async function updateOrganisationAdminSettings(
     organisation.expectedRespondents
   );
 
-  await organisation.save();
+  try {
+    await organisation.save();
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      throw toOrganisationDuplicateHttpError(error);
+    }
+
+    throw error;
+  }
   invalidatePublicDashboardSnapshotCache();
 
   return toDashboardItem(organisation.toObject(), submissionCount);
+}
+
+export async function deleteOrganisationAndSubmissions(orgId: string): Promise<{
+  organisationId: string;
+  orgName: string;
+}> {
+  const organisation = await OrganisationModel.findById(orgId);
+
+  if (!organisation) {
+    throw new HttpError(404, "Organisation not found.");
+  }
+
+  await SubmissionModel.deleteMany({ orgDomain: organisation.domain });
+  await OrganisationModel.deleteOne({ _id: organisation._id });
+  invalidatePublicDashboardSnapshotCache();
+
+  return {
+    organisationId: String(organisation._id),
+    orgName: organisation.orgName
+  };
 }
 
 export async function markOrganisationApproved(orgId: string): Promise<void> {

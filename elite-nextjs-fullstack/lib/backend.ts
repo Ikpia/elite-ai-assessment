@@ -1,4 +1,9 @@
-import { apiBlobRequest, apiRequest, getAdminHeaders } from "@/lib/api";
+import {
+  apiBlobRequest,
+  apiRequest,
+  getAdminHeaders,
+  type AdminAuthCredential
+} from "@/lib/api";
 import type {
   AssessmentSubmissionPayload,
   Organisation,
@@ -17,9 +22,14 @@ export const BACKEND_ENDPOINTS = {
     status: (organisationId: string) => `/api/assessment/status/${organisationId}`
   },
   admin: {
+    access: {
+      request: "/api/admin/access/request"
+    },
     organisations: {
       list: "/api/admin/organisations",
-      update: (organisationId: string) => `/api/admin/organisations/${organisationId}`
+      create: "/api/admin/organisations",
+      update: (organisationId: string) => `/api/admin/organisations/${organisationId}`,
+      delete: (organisationId: string) => `/api/admin/organisations/${organisationId}`
     }
   },
   public: {
@@ -64,6 +74,9 @@ export interface AssessmentSubmitResponse {
 
 export interface OrganisationsListResponse {
   organisations: Organisation[];
+  accessScope: "super-admin" | "organisation-admin";
+  organisationId: string | null;
+  directorEmail: string | null;
 }
 
 export interface UpdateOrganisationPayload {
@@ -72,9 +85,26 @@ export interface UpdateOrganisationPayload {
   expectedRespondents?: number | null;
 }
 
+export interface CreateOrganisationPayload {
+  orgName: string;
+  directorEmail: string;
+  firmType: Organisation["firmType"];
+  expectedRespondents?: number | null;
+}
+
 export interface UpdateOrganisationResponse {
   message: string;
   organisation: Organisation;
+}
+
+export interface CreateOrganisationResponse {
+  message: string;
+  organisation: Organisation;
+}
+
+export interface DeleteOrganisationResponse {
+  message: string;
+  organisationId: string;
 }
 
 export interface SendReportPayload {
@@ -89,9 +119,18 @@ export interface SendReportResponse {
   organisationId: string;
 }
 
-function withAdminHeaders(secret: string): HeadersInit {
+export interface AdminAccessRequestResponse {
+  message: string;
+  sessionToken: string;
+  email: string;
+  organisationId: string | null;
+  accessScope: "super-admin" | "organisation-admin";
+  expiresInHours: number;
+}
+
+function withAdminHeaders(auth: AdminAuthCredential): HeadersInit {
   return {
-    ...getAdminHeaders(secret)
+    ...getAdminHeaders(auth)
   };
 }
 
@@ -114,16 +153,34 @@ export const backendApi = {
       apiRequest<OrganisationStatusResponse>(BACKEND_ENDPOINTS.assessment.status(organisationId))
   },
   admin: {
+    access: {
+      request: (email: string) =>
+        apiRequest<AdminAccessRequestResponse>(BACKEND_ENDPOINTS.admin.access.request, {
+          method: "POST",
+          body: JSON.stringify({ email })
+        })
+    },
     organisations: {
-      list: (secret: string) =>
+      list: (auth: AdminAuthCredential) =>
         apiRequest<OrganisationsListResponse>(BACKEND_ENDPOINTS.admin.organisations.list, {
-          headers: withAdminHeaders(secret)
+          headers: withAdminHeaders(auth)
         }),
-      update: (secret: string, organisationId: string, payload: UpdateOrganisationPayload) =>
+      create: (auth: AdminAuthCredential, payload: CreateOrganisationPayload) =>
+        apiRequest<CreateOrganisationResponse>(BACKEND_ENDPOINTS.admin.organisations.create, {
+          method: "POST",
+          headers: withAdminHeaders(auth),
+          body: JSON.stringify(payload)
+        }),
+      update: (auth: AdminAuthCredential, organisationId: string, payload: UpdateOrganisationPayload) =>
         apiRequest<UpdateOrganisationResponse>(BACKEND_ENDPOINTS.admin.organisations.update(organisationId), {
           method: "PATCH",
-          headers: withAdminHeaders(secret),
+          headers: withAdminHeaders(auth),
           body: JSON.stringify(payload)
+        }),
+      delete: (auth: AdminAuthCredential, organisationId: string) =>
+        apiRequest<DeleteOrganisationResponse>(BACKEND_ENDPOINTS.admin.organisations.delete(organisationId), {
+          method: "DELETE",
+          headers: withAdminHeaders(auth)
         })
     }
   },
@@ -132,15 +189,15 @@ export const backendApi = {
       apiRequest<PublicDashboardResponse>(BACKEND_ENDPOINTS.public.dashboard)
   },
   report: {
-    generate: (secret: string, organisationId: string) =>
+    generate: (auth: AdminAuthCredential, organisationId: string) =>
       apiBlobRequest(BACKEND_ENDPOINTS.report.generate(organisationId), {
         method: "POST",
-        headers: withAdminHeaders(secret)
+        headers: withAdminHeaders(auth)
       }),
-    send: (secret: string, organisationId: string, payload?: SendReportPayload) =>
+    send: (auth: AdminAuthCredential, organisationId: string, payload?: SendReportPayload) =>
       apiRequest<SendReportResponse>(BACKEND_ENDPOINTS.report.send(organisationId), {
         method: "POST",
-        headers: withAdminHeaders(secret),
+        headers: withAdminHeaders(auth),
         body: JSON.stringify(payload || {})
       })
   }

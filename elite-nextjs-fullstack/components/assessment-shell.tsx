@@ -23,7 +23,9 @@ import {
   LogOut,
   Mail,
   Menu,
+  Plus,
   Send,
+  Trash2,
   Users,
   Youtube,
   X
@@ -31,7 +33,7 @@ import {
 
 import { PerformanceMetricDiagram, SurfaceCodeDiagram } from "@/components/diagrams";
 import { SpinningGlobeScene } from "@/components/quantum-scene";
-import { ApiError, buildApiUrl } from "@/lib/api";
+import { ApiError, buildApiUrl, type AdminAuthCredential } from "@/lib/api";
 import { BACKEND_ENDPOINTS, backendApi } from "@/lib/backend";
 import {
   DEFAULT_FIRM_TYPE,
@@ -59,6 +61,11 @@ type AppRoute =
 
 type AnswerState = Record<number, string | string[]>;
 type BackendStatus = "checking" | "connected" | "offline";
+type AdminAccessScope = "super-admin" | "organisation-admin";
+type AdminSessionAuth = AdminAuthCredential & {
+  directorEmail?: string;
+  accessScope?: AdminAccessScope;
+};
 
 interface LastSubmissionSnapshot {
   organisationId: string;
@@ -78,6 +85,13 @@ interface AdminDraft {
 
 type AdminDraftState = Record<string, AdminDraft>;
 
+interface CreateOrganisationDraft {
+  orgName: string;
+  directorEmail: string;
+  firmType: FirmType;
+  expectedRespondents: string;
+}
+
 interface PublicDashboardCacheEntry {
   data: PublicDashboardResponse;
   cachedAt: number;
@@ -86,7 +100,7 @@ interface PublicDashboardCacheEntry {
 const RESPONDENT_STORAGE_KEY = "elite-frontend:respondent";
 const ANSWERS_STORAGE_KEY = "elite-frontend:answers";
 const LAST_SUBMISSION_STORAGE_KEY = "elite-frontend:last-submission";
-const ADMIN_SECRET_STORAGE_KEY = "elite-frontend:admin-secret";
+const ADMIN_AUTH_STORAGE_KEY = "elite-frontend:admin-auth";
 const ANSWER_OWNER_STORAGE_KEY = "elite-frontend:answer-owner";
 const PUBLIC_DASHBOARD_STORAGE_KEY = "elite-frontend:public-dashboard";
 const MARKETING_SITE_URL = (
@@ -113,9 +127,16 @@ const EMPTY_ENTRY_DRAFT: SubmissionDraft = {
   consentAccepted: false
 };
 
+const EMPTY_CREATE_ORG_DRAFT: CreateOrganisationDraft = {
+  orgName: "",
+  directorEmail: "",
+  firmType: DEFAULT_FIRM_TYPE,
+  expectedRespondents: ""
+};
+
 const ADMIN_NOTES = [
-  "Review response counts and readiness scores before sending the final report.",
-  "Capture the correct director email and expected respondent count per organisation.",
+  "Elite Global AI admins can onboard each firm by assigning its admin email and organisation details.",
+  "Firm admins only see their own organisation dashboard, reports, and readiness data.",
   "Generate and send the PDF report only when you are satisfied with the aggregate data."
 ];
 
@@ -278,6 +299,53 @@ function removeStorage(key: string) {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(key);
   }
+}
+
+function readStoredAdminAuth(): AdminSessionAuth | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const structuredValue = window.sessionStorage.getItem(ADMIN_AUTH_STORAGE_KEY);
+
+  if (structuredValue) {
+    try {
+      const parsed = JSON.parse(structuredValue) as Partial<AdminSessionAuth>;
+
+      if (
+        (parsed.type === "secret" || parsed.type === "token") &&
+        typeof parsed.value === "string" &&
+        parsed.value.trim()
+      ) {
+        return {
+          type: parsed.type,
+          value: parsed.value,
+          accessScope:
+            parsed.accessScope === "super-admin" || parsed.accessScope === "organisation-admin"
+              ? parsed.accessScope
+              : undefined,
+          directorEmail:
+            typeof parsed.directorEmail === "string" ? parsed.directorEmail : undefined
+        };
+      }
+    } catch {
+      window.sessionStorage.removeItem(ADMIN_AUTH_STORAGE_KEY);
+    }
+  }
+  return null;
+}
+
+function writeStoredAdminAuth(auth: AdminSessionAuth | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (!auth) {
+    window.sessionStorage.removeItem(ADMIN_AUTH_STORAGE_KEY);
+    return;
+  }
+
+  window.sessionStorage.setItem(ADMIN_AUTH_STORAGE_KEY, JSON.stringify(auth));
 }
 
 function readPublicDashboardCacheEntry(): PublicDashboardCacheEntry | null {
@@ -495,15 +563,13 @@ export function AssessmentShell() {
   const [orgs, setOrgs] = useState<Organisation[]>([]);
   const [drafts, setDrafts] = useState<AdminDraftState>({});
   const [adminLoading, setAdminLoading] = useState(false);
-  const [secretInput, setSecretInput] = useState(() =>
-    typeof window === "undefined"
-      ? ""
-      : window.sessionStorage.getItem(ADMIN_SECRET_STORAGE_KEY) || ""
+  const [adminLoginLoading, setAdminLoginLoading] = useState(false);
+  const [firmAdminEmailInput, setFirmAdminEmailInput] = useState("");
+  const [createOrgDraft, setCreateOrgDraft] = useState<CreateOrganisationDraft>(
+    EMPTY_CREATE_ORG_DRAFT
   );
-  const [secret, setSecret] = useState(() =>
-    typeof window === "undefined"
-      ? ""
-      : window.sessionStorage.getItem(ADMIN_SECRET_STORAGE_KEY) || ""
+  const [adminAuth, setAdminAuth] = useState<AdminSessionAuth | null>(() =>
+    readStoredAdminAuth()
   );
   const [isAuthed, setIsAuthed] = useState(false);
   const [adminError, setAdminError] = useState("");
@@ -677,15 +743,8 @@ export function AssessmentShell() {
   }, [answerOwnerSignature]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    if (secret) {
-      window.sessionStorage.setItem(ADMIN_SECRET_STORAGE_KEY, secret);
-    } else {
-      window.sessionStorage.removeItem(ADMIN_SECRET_STORAGE_KEY);
-    }
-  }, [secret]);
+    writeStoredAdminAuth(adminAuth);
+  }, [adminAuth]);
 
   useEffect(() => {
     if (route.name === "assessment" && !isCompleteDraft(formData)) {
@@ -694,10 +753,32 @@ export function AssessmentShell() {
   }, [route, formData]);
 
   useEffect(() => {
-    if (route.name === "admin" && secret && !isAuthed) {
-      void fetchOrgs(secret);
+    if (route.name !== "admin" || isAuthed || !adminAuth) {
+      return;
     }
-  }, [route, secret, isAuthed]);
+
+    void fetchOrgs(adminAuth);
+  }, [route, adminAuth, isAuthed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || route.name !== "admin") {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    const accessToken = url.searchParams.get("admin_access")?.trim() || "";
+
+    if (!accessToken) {
+      return;
+    }
+
+    url.searchParams.delete("admin_access");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    setAdminAuth({ type: "token", value: accessToken });
+    setIsAuthed(false);
+    setAdminError("");
+    setAdminNotice("Admin access granted. Loading dashboard.");
+  }, [route]);
 
   useEffect(() => {
     if (route.name === "dashboard") {
@@ -795,6 +876,7 @@ export function AssessmentShell() {
     ? orgs.reduce((total, organisation) => total + organisation.aggregatedScores.total, 0) /
       orgs.length
     : 0;
+  const isSuperAdmin = adminAuth?.accessScope === "super-admin";
 
   function navigate(path: string, replace = false) {
     if (typeof window === "undefined") {
@@ -1019,9 +1101,9 @@ export function AssessmentShell() {
     }
   };
 
-  const fetchOrgs = async (providedSecret = secret) => {
-    if (!providedSecret.trim()) {
-      setAdminError("Enter the admin secret to continue.");
+  const fetchOrgs = async (providedAuth = adminAuth) => {
+    if (!providedAuth || !providedAuth.value.trim()) {
+      setAdminError("Enter an admin email to access the dashboard.");
       setAdminLoading(false);
       return;
     }
@@ -1030,20 +1112,59 @@ export function AssessmentShell() {
     setAdminError("");
 
     try {
-      const data = await backendApi.admin.organisations.list(providedSecret);
+      const data = await backendApi.admin.organisations.list(providedAuth);
+      const resolvedAuth: AdminSessionAuth = {
+        ...providedAuth,
+        accessScope: data.accessScope,
+        directorEmail:
+          data.accessScope === "organisation-admin"
+            ? data.directorEmail || providedAuth.directorEmail
+            : undefined
+      };
       setOrgs(data.organisations);
       setDrafts(buildAdminDrafts(data.organisations));
       setIsAuthed(true);
-      setSecret(providedSecret);
-      setSecretInput(providedSecret);
-      window.sessionStorage.setItem(ADMIN_SECRET_STORAGE_KEY, providedSecret);
+      setAdminAuth(resolvedAuth);
     } catch (error) {
       setIsAuthed(false);
-      setSecret("");
-      window.sessionStorage.removeItem(ADMIN_SECRET_STORAGE_KEY);
+      setAdminAuth(null);
       setAdminError(getErrorMessage(error, "Unable to access the admin dashboard."));
     } finally {
       setAdminLoading(false);
+    }
+  };
+
+  const loginAdminByEmail = async () => {
+    const email = firmAdminEmailInput.trim();
+
+    if (!email) {
+      setAdminError("Enter an admin email.");
+      return;
+    }
+
+    setAdminLoginLoading(true);
+    setAdminError("");
+    setAdminNotice("");
+
+    try {
+      const response = await backendApi.admin.access.request(email);
+      await fetchOrgs({
+        type: "token",
+        value: response.sessionToken,
+        accessScope: response.accessScope,
+        directorEmail:
+          response.accessScope === "organisation-admin" ? response.email : undefined
+      });
+      setFirmAdminEmailInput(response.email);
+      setAdminNotice(
+        response.accessScope === "super-admin"
+          ? "Elite Global AI admin access granted."
+          : `Firm admin access granted for ${response.email}.`
+      );
+    } catch (error) {
+      setAdminError(getErrorMessage(error, "Unable to access the admin dashboard."));
+    } finally {
+      setAdminLoginLoading(false);
     }
   };
 
@@ -1144,7 +1265,11 @@ export function AssessmentShell() {
       payload.expectedRespondents = null;
     }
 
-    const response = await backendApi.admin.organisations.update(secret, organisationId, payload);
+    if (!adminAuth) {
+      throw new Error("Admin authentication is required.");
+    }
+
+    const response = await backendApi.admin.organisations.update(adminAuth, organisationId, payload);
     setDrafts((current) => ({
       ...current,
       [organisationId]: {
@@ -1165,7 +1290,7 @@ export function AssessmentShell() {
     setAdminNotice("");
     try {
       const organisation = await saveOrganisation(organisationId);
-      await fetchOrgs(secret);
+      await fetchOrgs(adminAuth);
       if (organisation) {
         setAdminNotice(`Saved settings for ${organisation.orgName}.`);
       }
@@ -1184,7 +1309,11 @@ export function AssessmentShell() {
 
     try {
       const organisation = await saveOrganisation(organisationId);
-      const blob = await backendApi.report.generate(secret, organisationId);
+      if (!adminAuth) {
+        throw new Error("Admin authentication is required.");
+      }
+
+      const blob = await backendApi.report.generate(adminAuth, organisationId);
       const previewUrl = URL.createObjectURL(blob);
 
       if (previewWindow && !previewWindow.closed) {
@@ -1197,7 +1326,7 @@ export function AssessmentShell() {
       }
 
       window.setTimeout(() => URL.revokeObjectURL(previewUrl), 60000);
-      await fetchOrgs(secret);
+      await fetchOrgs(adminAuth);
       setAdminNotice(`Generated preview for ${organisation?.orgName || "organisation"}.`);
     } catch (error) {
       if (previewWindow && !previewWindow.closed) {
@@ -1217,12 +1346,16 @@ export function AssessmentShell() {
     try {
       const organisation = await saveOrganisation(organisationId);
       const directorEmail = drafts[organisationId]?.directorEmail.trim();
+      if (!adminAuth) {
+        throw new Error("Admin authentication is required.");
+      }
+
       const response = await backendApi.report.send(
-        secret,
+        adminAuth,
         organisationId,
         directorEmail ? { directorEmail } : undefined
       );
-      await fetchOrgs(secret);
+      await fetchOrgs(adminAuth);
       setAdminNotice(`Report processed for ${response.directorEmail} (${response.deliveryMode} mode).`);
       if (organisation) {
         setDrafts((current) => ({
@@ -1241,10 +1374,94 @@ export function AssessmentShell() {
     }
   };
 
+  const handleCreateOrganisation = async () => {
+    const orgName = createOrgDraft.orgName.trim();
+    const directorEmail = createOrgDraft.directorEmail.trim();
+    const expectedRespondents = createOrgDraft.expectedRespondents.trim();
+
+    if (!orgName || !directorEmail) {
+      setAdminError("Enter both the firm name and firm admin email.");
+      return;
+    }
+
+    if (!adminAuth) {
+      setAdminError("Admin authentication is required.");
+      return;
+    }
+
+    setBusyKey("create-organisation");
+    setAdminError("");
+    setAdminNotice("");
+
+    try {
+      const payload: {
+        orgName: string;
+        directorEmail: string;
+        firmType: FirmType;
+        expectedRespondents?: number | null;
+      } = {
+        orgName,
+        directorEmail,
+        firmType: createOrgDraft.firmType
+      };
+
+      if (expectedRespondents) {
+        const numericValue = Number(expectedRespondents);
+
+        if (!Number.isInteger(numericValue) || numericValue <= 0) {
+          throw new Error("Expected respondents must be a positive whole number.");
+        }
+
+        payload.expectedRespondents = numericValue;
+      } else {
+        payload.expectedRespondents = null;
+      }
+
+      const response = await backendApi.admin.organisations.create(adminAuth, payload);
+      setCreateOrgDraft(EMPTY_CREATE_ORG_DRAFT);
+      await fetchOrgs(adminAuth);
+      setAdminNotice(`Firm admin created for ${response.organisation.orgName}.`);
+    } catch (error) {
+      setAdminError(getErrorMessage(error, "Failed to create the firm admin."));
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const handleDeleteOrganisation = async (organisationId: string, orgName: string) => {
+    if (!adminAuth) {
+      setAdminError("Admin authentication is required.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${orgName} and all submission data for this firm? This cannot be undone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyKey(`delete-${organisationId}`);
+    setAdminError("");
+    setAdminNotice("");
+
+    try {
+      const response = await backendApi.admin.organisations.delete(adminAuth, organisationId);
+      await fetchOrgs(adminAuth);
+      setAdminNotice(response.message);
+    } catch (error) {
+      setAdminError(getErrorMessage(error, "Failed to delete the firm."));
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
   const handleLogout = () => {
-    window.sessionStorage.removeItem(ADMIN_SECRET_STORAGE_KEY);
-    setSecret("");
-    setSecretInput("");
+    writeStoredAdminAuth(null);
+    setAdminAuth(null);
+    setFirmAdminEmailInput("");
+    setCreateOrgDraft(EMPTY_CREATE_ORG_DRAFT);
     setIsAuthed(false);
     setOrgs([]);
     setDrafts({});
@@ -2718,38 +2935,56 @@ export function AssessmentShell() {
                       Admin Login
                     </h2>
                     <p className="max-w-2xl text-[0.98rem] leading-7 text-slate-500 sm:text-[1.04rem]">
-                      Enter the internal admin secret from the backend environment to load
-                      the organisation readiness dashboard.
+                      Enter your admin email to access the correct admin dashboard.
+                      Elite Global AI admins receive full platform access, while firm
+                      admins only see their own organisation.
                     </p>
                   </div>
 
                   <div className="space-y-5">
-                    <div className="space-y-2.5">
-                      <label className="ml-1 text-[12px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
-                        Secure Access Token
-                      </label>
-                      <input
-                        type="password"
-                        placeholder="••••••••••••"
-                        className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 font-mono text-[15px] font-medium text-slate-900"
-                        value={secretInput}
-                        onChange={(event) => setSecretInput(event.target.value)}
-                      />
+                    <div className="rounded-[24px] border border-blue-100 bg-blue-50/60 p-4 sm:p-5">
+                      <div className="mb-4">
+                        <p className="text-[10px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
+                          Admin Email
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-slate-500">
+                          The dashboard scope is determined immediately by the email you
+                          enter.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2.5">
+                        <label className="ml-1 text-[12px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
+                          Email Address
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="admin@eliteglobalai.com or director@company.com"
+                          className="w-full rounded-2xl border border-blue-100 bg-white px-5 py-4 text-[15px] font-medium text-slate-900"
+                          value={firmAdminEmailInput}
+                          onChange={(event) => setFirmAdminEmailInput(event.target.value)}
+                        />
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          void loginAdminByEmail();
+                        }}
+                        disabled={adminLoginLoading}
+                        className="mt-4 flex w-full items-center justify-center gap-3 rounded-full bg-blue-900 px-6 py-3 text-[15px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {adminLoginLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                        Access Dashboard
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
                     </div>
 
+                    {adminNotice ? (
+                      <InlineBanner tone="success" message={adminNotice} onClose={() => setAdminNotice("")} className="rounded-2xl" />
+                    ) : null}
                     {adminError ? (
                       <InlineBanner tone="error" message={adminError} onClose={() => setAdminError("")} className="rounded-2xl" />
                     ) : null}
-
-                    <button
-                      onClick={() => { void fetchOrgs(secretInput); }}
-                      disabled={adminLoading}
-                      className="flex w-full items-center justify-center gap-3 rounded-full bg-blue-900 px-6 py-3 text-[15px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"
-                    >
-                      {adminLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                      Access Dashboard
-                      <ArrowRight className="h-4 w-4" />
-                    </button>
                   </div>
                 </div>
 
@@ -2785,15 +3020,17 @@ export function AssessmentShell() {
             <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">
-                  Admin Dashboard
+                  {isSuperAdmin ? "EliteGlobal Admin Dashboard" : "Firm Admin Dashboard"}
                 </p>
                 <h1 className="font-serif text-[1.62rem] font-medium leading-[1.04] tracking-[0.01em] text-slate-950 sm:text-[1.96rem] lg:text-[2.42rem]">
-                  Organisation readiness overview
+                  {isSuperAdmin
+                    ? "Organisation readiness overview"
+                    : "Your organisation readiness overview"}
                 </h1>
               </div>
               <div className="flex flex-wrap gap-3">
                 <button
-                  onClick={() => { void fetchOrgs(secret); }}
+                  onClick={() => { void fetchOrgs(adminAuth); }}
                   className="inline-flex items-center gap-2 rounded-full border border-stone-200 px-5 py-3 text-[15px] font-semibold text-stone-700"
                 >
                   Refresh
@@ -2827,6 +3064,112 @@ export function AssessmentShell() {
             ) : null}
           </div>
 
+          {isSuperAdmin ? (
+            <div className="mb-6 rounded-[28px] border border-stone-200 bg-white/95 p-5 shadow-xl sm:p-6">
+              <div className="mb-5 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">
+                    Firm Admin Onboarding
+                  </p>
+                  <h2 className="font-serif text-[1.35rem] font-medium tracking-[0.01em] text-slate-950 sm:text-[1.6rem]">
+                    Create a firm and assign its admin email
+                  </h2>
+                </div>
+                <p className="max-w-xl text-sm leading-6 text-stone-500">
+                  Once you create the firm record here, that email can log in directly on
+                  the admin page and will be restricted to its own firm.
+                </p>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-4">
+                <div className="space-y-2.5">
+                  <label className="ml-1 text-[12px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
+                    Firm Name
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 text-[15px] font-medium text-slate-900"
+                    value={createOrgDraft.orgName}
+                    onChange={(event) =>
+                      setCreateOrgDraft((current) => ({ ...current, orgName: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2.5">
+                  <label className="ml-1 text-[12px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
+                    Firm Admin Email
+                  </label>
+                  <input
+                    type="email"
+                    className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 text-[15px] font-medium text-slate-900"
+                    value={createOrgDraft.directorEmail}
+                    onChange={(event) =>
+                      setCreateOrgDraft((current) => ({
+                        ...current,
+                        directorEmail: event.target.value
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2.5">
+                  <label className="ml-1 text-[12px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
+                    Firm Type
+                  </label>
+                  <select
+                    className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 text-[15px] font-medium text-slate-900"
+                    value={createOrgDraft.firmType}
+                    onChange={(event) =>
+                      setCreateOrgDraft((current) => ({
+                        ...current,
+                        firmType: event.target.value as FirmType
+                      }))
+                    }
+                  >
+                    {FIRM_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2.5">
+                  <label className="ml-1 text-[12px] font-extrabold uppercase tracking-[0.22em] text-slate-400">
+                    Expected Respondents
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="w-full rounded-2xl border border-stone-200 bg-stone-50 px-5 py-4 text-[15px] font-medium text-slate-900"
+                    value={createOrgDraft.expectedRespondents}
+                    onChange={(event) =>
+                      setCreateOrgDraft((current) => ({
+                        ...current,
+                        expectedRespondents: event.target.value
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <button
+                  onClick={() => {
+                    void handleCreateOrganisation();
+                  }}
+                  disabled={Boolean(busyKey)}
+                  className="inline-flex items-center gap-2 rounded-full bg-stone-900 px-5 py-3 text-[15px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {busyKey === "create-organisation" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  Create Firm Admin
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {adminLoading ? (
             <div className="rounded-[28px] border border-stone-200 bg-white p-12 text-center shadow-xl">
               <Loader2 className="mx-auto mb-4 h-6 w-6 animate-spin text-stone-700" />
@@ -2836,7 +3179,9 @@ export function AssessmentShell() {
             <div className="rounded-[28px] border border-stone-200 bg-white p-12 text-center shadow-xl">
               <p className="text-lg font-semibold text-stone-900">No organisations yet</p>
               <p className="mt-2 text-sm text-stone-500">
-                Once respondents submit assessments, the organisation records will appear here.
+                {isSuperAdmin
+                  ? "Use the onboarding form above to create the first firm admin and organisation."
+                  : "Your organisation record has not been configured yet. Contact Elite Global AI."}
               </p>
             </div>
           ) : (
@@ -2970,6 +3315,22 @@ export function AssessmentShell() {
                         {busyKey === `send-${organisation.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                         Approve & Send Report
                       </button>
+                      {isSuperAdmin ? (
+                        <button
+                          onClick={() => {
+                            void handleDeleteOrganisation(organisation.id, organisation.orgName);
+                          }}
+                          disabled={Boolean(busyKey)}
+                          className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-5 py-3 text-[15px] font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-70"
+                        >
+                          {busyKey === `delete-${organisation.id}` ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                          Delete Firm
+                        </button>
+                      ) : null}
                     </div>
 
                     <div className="mt-5 flex flex-wrap gap-5 text-[14px] text-stone-500">

@@ -44,6 +44,31 @@ function buildReportEmailHtml(reportData: ReportData): string {
   `;
 }
 
+function buildAdminAccessEmailHtml(params: {
+  accessLabel: string;
+  accessUrl: string;
+  expiresInHours: number;
+}): string {
+  const { accessLabel, accessUrl, expiresInHours } = params;
+
+  return `
+    <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+      <h1 style="margin-bottom: 8px;">Elite Global AI Admin Access</h1>
+      <p style="margin-top: 0;">A secure admin link was requested for ${accessLabel}.</p>
+      <p>
+        <a
+          href="${accessUrl}"
+          style="display:inline-block;padding:12px 20px;border-radius:999px;background:#0b5fff;color:#ffffff;text-decoration:none;font-weight:700;"
+        >
+          Open Admin Dashboard
+        </a>
+      </p>
+      <p>This link expires in ${expiresInHours} hour${expiresInHours === 1 ? "" : "s"}.</p>
+      <p>If you did not request this access, you can ignore this email.</p>
+    </div>
+  `;
+}
+
 export async function sendOrganisationReportEmail(params: {
   directorEmail: string;
   filename: string;
@@ -75,6 +100,51 @@ export async function sendOrganisationReportEmail(params: {
 
   if (error) {
     throw new HttpError(502, "Report email delivery failed.", error);
+  }
+
+  return {
+    mode: "live",
+    messageId: data?.id || null
+  };
+}
+
+export async function sendAdminAccessEmail(params: {
+  recipientEmail: string;
+  accessLabel: string;
+  accessUrl: string;
+  expiresInHours: number;
+}): Promise<{ mode: "mock" | "live"; messageId: string | null }> {
+  const { recipientEmail, accessLabel, accessUrl, expiresInHours } = params;
+
+  if (!env.resendApiKey || !env.resendFromEmail) {
+    return {
+      mode: "mock",
+      messageId: null
+    };
+  }
+
+  const resend = new Resend(env.resendApiKey);
+  const { data, error } = await resend.emails.send({
+    from: env.resendFromEmail,
+    to: recipientEmail,
+    subject: `${accessLabel} admin dashboard access`,
+    html: buildAdminAccessEmailHtml({
+      accessLabel,
+      accessUrl,
+      expiresInHours
+    })
+  });
+
+  if (error) {
+    if (env.nodeEnv !== "production") {
+      console.warn("Admin access email delivery failed; falling back to mock mode.", error);
+      return {
+        mode: "mock",
+        messageId: null
+      };
+    }
+
+    throw new HttpError(502, "Admin access email delivery failed.", error);
   }
 
   return {
