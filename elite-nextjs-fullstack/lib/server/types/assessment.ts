@@ -1,4 +1,4 @@
-export type RoleLevel = "c-suite" | "manager" | "ic";
+export type RoleLevel = "director" | "c-suite" | "manager" | "ic";
 export type FirmType =
   | "financial-services"
   | "healthcare"

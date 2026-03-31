@@ -8,7 +8,7 @@ import type {
   SingleChoiceOption
 } from "../types/assessment";
 
-export const ROLE_LEVELS: RoleLevel[] = ["c-suite", "manager", "ic"];
+export const ROLE_LEVELS: RoleLevel[] = ["director", "c-suite", "manager", "ic"];
 export const FIRM_TYPES: FirmType[] = [
   "financial-services",
   "healthcare",

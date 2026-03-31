@@ -69,6 +69,39 @@ function buildAdminAccessEmailHtml(params: {
   `;
 }
 
+function buildDirectorInviteEmailHtml(params: {
+  directorName: string;
+  orgName: string;
+  shareUrl: string;
+}): string {
+  const { directorName, orgName, shareUrl } = params;
+
+  return `
+    <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+      <h1 style="margin-bottom: 8px;">Elite Global AI Team Assessment Link</h1>
+      <p style="margin-top: 0;">Hello ${directorName},</p>
+      <p>
+        Your email has been registered as the firm admin for <strong>${orgName}</strong>.
+      </p>
+      <p>
+        Share the link below with your team so they can open the respondent form for your firm
+        and continue into the assessment.
+      </p>
+      <p>
+        <a
+          href="${shareUrl}"
+          style="display:inline-block;padding:12px 20px;border-radius:999px;background:#0b5fff;color:#ffffff;text-decoration:none;font-weight:700;"
+        >
+          Open Team Assessment Form
+        </a>
+      </p>
+      <p>
+        You can also use your email on the admin login screen to access your firm dashboard.
+      </p>
+    </div>
+  `;
+}
+
 export async function sendOrganisationReportEmail(params: {
   directorEmail: string;
   filename: string;
@@ -145,6 +178,51 @@ export async function sendAdminAccessEmail(params: {
     }
 
     throw new HttpError(502, "Admin access email delivery failed.", error);
+  }
+
+  return {
+    mode: "live",
+    messageId: data?.id || null
+  };
+}
+
+export async function sendDirectorInviteEmail(params: {
+  directorEmail: string;
+  directorName: string;
+  orgName: string;
+  shareUrl: string;
+}): Promise<{ mode: "mock" | "live"; messageId: string | null }> {
+  const { directorEmail, directorName, orgName, shareUrl } = params;
+
+  if (!env.resendApiKey || !env.resendFromEmail) {
+    return {
+      mode: "mock",
+      messageId: null
+    };
+  }
+
+  const resend = new Resend(env.resendApiKey);
+  const { data, error } = await resend.emails.send({
+    from: env.resendFromEmail,
+    to: directorEmail,
+    subject: `${orgName} team assessment link`,
+    html: buildDirectorInviteEmailHtml({
+      directorName,
+      orgName,
+      shareUrl
+    })
+  });
+
+  if (error) {
+    if (env.nodeEnv !== "production") {
+      console.warn("Director invite email delivery failed; falling back to mock mode.", error);
+      return {
+        mode: "mock",
+        messageId: null
+      };
+    }
+
+    throw new HttpError(502, "Director invite email delivery failed.", error);
   }
 
   return {

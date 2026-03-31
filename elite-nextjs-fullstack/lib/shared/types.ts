@@ -1,4 +1,4 @@
-export type RoleLevel = "c-suite" | "manager" | "ic";
+export type RoleLevel = "director" | "c-suite" | "manager" | "ic";
 export type FirmType =
   | "financial-services"
   | "healthcare"
@@ -33,12 +33,39 @@ export interface AssessmentSubmissionPayload {
   answers: SubmissionAnswer[];
 }
 
+export interface DirectorOnboardingPayload {
+  firmType: FirmType;
+  orgName: string;
+  directorEmail: string;
+  directorName: string;
+  directorDept: string;
+  consentAccepted: true;
+}
+
 export interface ValidateEmailResponse {
   valid: boolean;
   blocked: boolean;
   normalizedEmail: string | null;
   domain: string | null;
   reason: string | null;
+}
+
+export interface DirectorOnboardingResponse {
+  message: string;
+  organisationId: string;
+  organisationKey: string;
+  firmType: FirmType;
+  orgName: string;
+  shareUrl: string;
+  deliveryMode: "mock" | "live";
+  messageId: string | null;
+}
+
+export interface AssessmentInvitePrefillResponse {
+  organisationId: string;
+  organisationKey: string;
+  firmType: FirmType;
+  orgName: string;
 }
 
 export interface AggregateScores {

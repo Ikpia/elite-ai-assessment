@@ -409,6 +409,109 @@ export async function getOrganisationDashboardById(
   return toDashboardItem(organisation, submissionCount);
 }
 
+export async function registerDirectorAdminForOrganisation(input: {
+  orgName: string;
+  directorEmail: string;
+  firmType: FirmType;
+}): Promise<{
+  organisationId: string;
+  organisationKey: string;
+  firmType: FirmType;
+  orgName: string;
+}> {
+  const normalizedOrgName = normalizeOrganisationName(input.orgName);
+  const organisationKey = buildOrganisationKey(normalizedOrgName);
+  const normalizedDirectorEmail = input.directorEmail.toLowerCase();
+
+  if (env.superAdminEmails.includes(normalizedDirectorEmail)) {
+    throw new HttpError(
+      409,
+      "That email is reserved for Elite Global AI superadmin access."
+    );
+  }
+
+  const [organisationByKey, organisationByDirectorEmail] = await Promise.all([
+    OrganisationModel.findOne({ domain: organisationKey }),
+    OrganisationModel.findOne({ directorEmail: normalizedDirectorEmail })
+  ]);
+
+  if (
+    organisationByDirectorEmail &&
+    (!organisationByKey ||
+      String(organisationByDirectorEmail._id) !== String(organisationByKey._id))
+  ) {
+    throw new HttpError(409, "Another organisation already uses that director email.");
+  }
+
+  if (!organisationByKey) {
+    try {
+      const organisation = await OrganisationModel.create({
+        domain: organisationKey,
+        firmType: input.firmType,
+        orgName: normalizedOrgName,
+        directorEmail: normalizedDirectorEmail,
+        expectedRespondents: null,
+        status: "collecting",
+        aggregatedScores: { ...ZERO_AGGREGATE_SCORES }
+      });
+
+      invalidatePublicDashboardSnapshotCache();
+
+      return {
+        organisationId: organisation.id,
+        organisationKey: organisation.domain,
+        firmType: organisation.firmType || "financial-services",
+        orgName: organisation.orgName
+      };
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        throw toOrganisationDuplicateHttpError(error);
+      }
+
+      throw error;
+    }
+  }
+
+  if (organisationByKey.firmType !== input.firmType) {
+    throw new HttpError(
+      409,
+      `This organisation is already linked to the ${organisationByKey.firmType} questionnaire.`
+    );
+  }
+
+  if (
+    organisationByKey.directorEmail &&
+    organisationByKey.directorEmail !== normalizedDirectorEmail
+  ) {
+    throw new HttpError(
+      409,
+      "This organisation already has a different director email configured."
+    );
+  }
+
+  organisationByKey.orgName = normalizedOrgName;
+  organisationByKey.directorEmail = normalizedDirectorEmail;
+
+  try {
+    await organisationByKey.save();
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      throw toOrganisationDuplicateHttpError(error);
+    }
+
+    throw error;
+  }
+
+  invalidatePublicDashboardSnapshotCache();
+
+  return {
+    organisationId: organisationByKey.id,
+    organisationKey: organisationByKey.domain,
+    firmType: organisationByKey.firmType || "financial-services",
+    orgName: organisationByKey.orgName
+  };
+}
+
 export async function createOrganisationAdminRecord(input: {
   orgName: string;
   directorEmail: string;
@@ -499,6 +602,35 @@ export async function resolveAdminAccessTargetByEmail(
     organisationId: String(organisations[0]._id),
     orgName: organisations[0].orgName,
     directorEmail: organisations[0].directorEmail || normalizedEmail
+  };
+}
+
+export async function getAssessmentInvitePrefillByOrganisationId(
+  organisationId: string
+): Promise<{
+  organisationId: string;
+  organisationKey: string;
+  firmType: FirmType;
+  orgName: string;
+}> {
+  const organisation = await OrganisationModel.findById(
+    organisationId,
+    {
+      domain: 1,
+      firmType: 1,
+      orgName: 1
+    }
+  ).lean();
+
+  if (!organisation) {
+    throw new HttpError(404, "Assessment invite is no longer valid.");
+  }
+
+  return {
+    organisationId: String(organisation._id),
+    organisationKey: organisation.domain,
+    firmType: organisation.firmType || "financial-services",
+    orgName: organisation.orgName
   };
 }
 

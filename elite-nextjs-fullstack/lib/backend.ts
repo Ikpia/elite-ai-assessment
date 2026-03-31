@@ -5,7 +5,10 @@ import {
   type AdminAuthCredential
 } from "@/lib/api";
 import type {
+  AssessmentInvitePrefillResponse,
   AssessmentSubmissionPayload,
+  DirectorOnboardingPayload,
+  DirectorOnboardingResponse,
   Organisation,
   OrganisationStatusResponse,
   PublicDashboardResponse,
@@ -18,6 +21,8 @@ export const BACKEND_ENDPOINTS = {
   },
   assessment: {
     validateEmail: "/api/assessment/validate-email",
+    directorOnboard: "/api/assessment/director-onboard",
+    invite: (inviteToken: string) => `/api/assessment/invite/${inviteToken}`,
     submit: "/api/assessment/submit",
     status: (organisationId: string) => `/api/assessment/status/${organisationId}`
   },
@@ -144,6 +149,15 @@ export const backendApi = {
         method: "POST",
         body: JSON.stringify({ email })
       }),
+    directorOnboard: (payload: DirectorOnboardingPayload) =>
+      apiRequest<DirectorOnboardingResponse>(BACKEND_ENDPOINTS.assessment.directorOnboard, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }),
+    invite: (inviteToken: string) =>
+      apiRequest<AssessmentInvitePrefillResponse>(
+        BACKEND_ENDPOINTS.assessment.invite(inviteToken)
+      ),
     submit: (payload: AssessmentSubmissionPayload) =>
       apiRequest<AssessmentSubmitResponse>(BACKEND_ENDPOINTS.assessment.submit, {
         method: "POST",

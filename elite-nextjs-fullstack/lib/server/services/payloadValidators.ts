@@ -93,6 +93,33 @@ export function parseAdminAccessRequestBody(body: unknown): { email: string } {
   };
 }
 
+export function parseDirectorOnboardingBody(body: unknown): {
+  firmType: FirmType;
+  orgName: string;
+  directorEmail: string;
+  directorName: string;
+  directorDept: string;
+  consentAccepted: true;
+} {
+  const payload = asRecord(body, "Request body");
+
+  if (payload.consentAccepted !== true) {
+    throw new HttpError(400, "consentAccepted must be true before submission.");
+  }
+
+  return {
+    firmType:
+      payload.firmType === undefined
+        ? "financial-services"
+        : parseFirmType(payload.firmType),
+    orgName: requireString(payload.orgName, "orgName"),
+    directorEmail: requireString(payload.directorEmail, "directorEmail"),
+    directorName: requireString(payload.directorName, "directorName"),
+    directorDept: requireString(payload.directorDept, "directorDept"),
+    consentAccepted: true
+  };
+}
+
 export function parseOrganisationCreateBody(
   body: unknown
 ): {

@@ -44,6 +44,7 @@ import {
   getQuestionsForFirmType
 } from "@/lib/shared/questions";
 import type {
+  AssessmentInvitePrefillResponse,
   FirmType,
   Organisation,
   PublicDashboardResponse,
@@ -103,6 +104,7 @@ const LAST_SUBMISSION_STORAGE_KEY = "elite-frontend:last-submission";
 const ADMIN_AUTH_STORAGE_KEY = "elite-frontend:admin-auth";
 const ANSWER_OWNER_STORAGE_KEY = "elite-frontend:answer-owner";
 const PUBLIC_DASHBOARD_STORAGE_KEY = "elite-frontend:public-dashboard";
+const ASSESSMENT_INVITE_QUERY_PARAM = "invite";
 const MARKETING_SITE_URL = (
   process.env.NEXT_PUBLIC_MARKETING_SITE_URL || "https://eliteglobalai.com"
 ).replace(/\/$/, "");
@@ -141,6 +143,7 @@ const ADMIN_NOTES = [
 ];
 
 const ROLE_OPTIONS: Array<{ value: RoleLevel; label: string }> = [
+  { value: "director", label: "Director" },
   { value: "c-suite", label: "C-Suite" },
   { value: "manager", label: "Manager" },
   { value: "ic", label: "Individual Contributor" }
@@ -583,6 +586,24 @@ export function AssessmentShell() {
   );
   const [publicDashboardLoading, setPublicDashboardLoading] = useState(false);
   const [publicDashboardError, setPublicDashboardError] = useState("");
+  const [inviteEntryLocked, setInviteEntryLocked] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    if (parseRoute(window.location.pathname).name !== "start") {
+      return false;
+    }
+
+    const inviteToken =
+      new URL(window.location.href).searchParams.get(ASSESSMENT_INVITE_QUERY_PARAM)?.trim() || "";
+
+    return Boolean(inviteToken);
+  });
+  const [invitePrefill, setInvitePrefill] = useState<AssessmentInvitePrefillResponse | null>(
+    null
+  );
+  const [inviteLoading, setInviteLoading] = useState(false);
   const assessmentViewportRef = useRef<HTMLDivElement | null>(null);
   const assessmentContentRef = useRef<HTMLDivElement | null>(null);
   const [assessmentScale, setAssessmentScale] = useState(1);
@@ -661,7 +682,7 @@ export function AssessmentShell() {
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !inviteEntryLocked) {
         navigate("/");
       }
     };
@@ -671,7 +692,7 @@ export function AssessmentShell() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [route]);
+  }, [route, inviteEntryLocked]);
 
   useEffect(() => {
     if (!entryNotice) {
@@ -781,6 +802,66 @@ export function AssessmentShell() {
   }, [route]);
 
   useEffect(() => {
+    if (typeof window === "undefined" || route.name !== "start") {
+      setInviteEntryLocked(false);
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    const inviteToken =
+      url.searchParams.get(ASSESSMENT_INVITE_QUERY_PARAM)?.trim() || "";
+
+    if (!inviteToken) {
+      setInviteEntryLocked(false);
+      setInvitePrefill(null);
+      return;
+    }
+
+    let active = true;
+    setInviteEntryLocked(true);
+    setInviteLoading(true);
+
+    backendApi.assessment
+      .invite(inviteToken)
+      .then((prefill) => {
+        if (!active) {
+          return;
+        }
+
+        setInvitePrefill(prefill);
+        setEntryError("");
+        setFormData((current) => ({
+          ...current,
+          firmType: prefill.firmType,
+          orgName: prefill.orgName,
+          email: "",
+          name: "",
+          role: "",
+          dept: "",
+          consentAccepted: false
+        }));
+      })
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
+
+        setEntryError(
+          getErrorMessage(error, "Unable to load this firm assessment link.")
+        );
+      })
+      .finally(() => {
+        if (active) {
+          setInviteLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [route]);
+
+  useEffect(() => {
     if (route.name === "dashboard") {
       const hasFreshState =
         publicDashboardFetchedAt !== null &&
@@ -877,6 +958,11 @@ export function AssessmentShell() {
       orgs.length
     : 0;
   const isSuperAdmin = adminAuth?.accessScope === "super-admin";
+  const isDirectorOnboardingFlow = formData.role === "director" && !invitePrefill;
+  const isInviteEntryFlow = inviteEntryLocked || inviteLoading || Boolean(invitePrefill);
+  const availableRoleOptions = invitePrefill
+    ? ROLE_OPTIONS.filter((roleOption) => roleOption.value !== "director")
+    : ROLE_OPTIONS;
 
   function navigate(path: string, replace = false) {
     if (typeof window === "undefined") {
@@ -919,6 +1005,18 @@ export function AssessmentShell() {
     scrollToSection(id);
   };
 
+  const handleStartModalCancel = () => {
+    if (isInviteEntryFlow) {
+      setInviteEntryLocked(false);
+      setInvitePrefill(null);
+      setInviteLoading(false);
+      setEntryError("");
+      setEntryNotice("");
+    }
+
+    navigate("/");
+  };
+
   const updateFormField = <K extends keyof SubmissionDraft>(key: K, value: SubmissionDraft[K]) => {
     if (key === "email") {
       setEntryNotice("");
@@ -955,6 +1053,38 @@ export function AssessmentShell() {
     }
   };
 
+  const handleDirectorOnboarding = async (normalizedEmail: string) => {
+    const response = await backendApi.assessment.directorOnboard({
+      firmType: formData.firmType as FirmType,
+      orgName: formData.orgName,
+      directorEmail: normalizedEmail,
+      directorName: formData.name,
+      directorDept: formData.dept,
+      consentAccepted: true
+    });
+
+    if (response.deliveryMode === "mock") {
+      try {
+        await navigator.clipboard.writeText(response.shareUrl);
+        setEntryNotice(
+          "Director onboarding submitted. The team assessment link has been copied to your clipboard for local testing."
+        );
+      } catch {
+        setEntryNotice(
+          `Director onboarding submitted. Share this link with your team: ${response.shareUrl}`
+        );
+      }
+    } else {
+      setEntryNotice(
+        "Director onboarding submitted. Check your email for the team assessment link and your firm admin access."
+      );
+    }
+
+    setFormData(EMPTY_ENTRY_DRAFT);
+    setAnswers({});
+    setAnswerOwnerSignature("");
+  };
+
   const handleStartAssessment = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setEntryError("");
@@ -987,6 +1117,20 @@ export function AssessmentShell() {
 
     const validation = await validateEmailInput(formData.email);
     if (!validation?.normalizedEmail) {
+      return;
+    }
+
+    if (isDirectorOnboardingFlow) {
+      setEntryLoading(true);
+      try {
+        await handleDirectorOnboarding(validation.normalizedEmail);
+      } catch (error) {
+        setEntryError(
+          getErrorMessage(error, "Unable to submit the director onboarding form.")
+        );
+      } finally {
+        setEntryLoading(false);
+      }
       return;
     }
 
@@ -1047,6 +1191,7 @@ export function AssessmentShell() {
     setFormData(EMPTY_ENTRY_DRAFT);
     setAnswers({});
     setAnswerOwnerSignature("");
+    setInvitePrefill(null);
   };
 
   const handleFinish = async () => {
@@ -2464,7 +2609,7 @@ export function AssessmentShell() {
         paddingBottom: "max(0.75rem, calc(env(safe-area-inset-bottom) + 0.5rem))"
       }}
       onClick={(event) => {
-        if (event.target === event.currentTarget) {
+        if (!isInviteEntryFlow && event.target === event.currentTarget) {
           navigate("/");
         }
       }}
@@ -2485,14 +2630,16 @@ export function AssessmentShell() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
-            <button
-              type="button"
-              onClick={() => navigate("/")}
-              className="absolute right-2.5 top-2.5 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/92 text-slate-500 shadow-[0_12px_32px_rgba(15,23,42,0.12)] transition-colors hover:text-slate-900 sm:right-4 sm:top-4 sm:h-11 sm:w-11"
-              aria-label="Close assessment entry modal"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            {!isInviteEntryFlow ? (
+              <button
+                type="button"
+                onClick={() => navigate("/")}
+                className="absolute right-2.5 top-2.5 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/92 text-slate-500 shadow-[0_12px_32px_rgba(15,23,42,0.12)] transition-colors hover:text-slate-900 sm:right-4 sm:top-4 sm:h-11 sm:w-11"
+                aria-label="Close assessment entry modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            ) : null}
 
             <form
               className="flex min-h-0 flex-1 flex-col"
@@ -2506,9 +2653,14 @@ export function AssessmentShell() {
                         Type of Firm
                       </label>
                       <select
-                        className="w-full rounded-[18px] border border-stone-200/90 bg-white px-4 py-3.5 text-[15px] font-medium text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:rounded-[22px] sm:px-5 sm:py-4"
+                        className={`w-full rounded-[18px] border px-4 py-3.5 text-[15px] font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition sm:rounded-[22px] sm:px-5 sm:py-4 ${
+                          invitePrefill
+                            ? "cursor-not-allowed border-stone-200/70 bg-stone-100 text-slate-500"
+                            : "border-stone-200/90 bg-white text-slate-900 focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
+                        }`}
                         value={formData.firmType}
                         onChange={(event) => updateFormField("firmType", event.target.value as FirmType | "")}
+                        disabled={Boolean(invitePrefill)}
                       >
                         <option value="">Select firm type</option>
                         {FIRM_TYPE_OPTIONS.map((firmOption) => (
@@ -2553,9 +2705,14 @@ export function AssessmentShell() {
                       <input
                         type="text"
                         placeholder="GTBank"
-                        className="w-full rounded-[18px] border border-stone-200/90 bg-white px-4 py-3.5 text-[15px] font-medium text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:rounded-[22px] sm:px-5 sm:py-4"
+                        className={`w-full rounded-[18px] border px-4 py-3.5 text-[15px] font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition sm:rounded-[22px] sm:px-5 sm:py-4 ${
+                          invitePrefill
+                            ? "cursor-not-allowed border-stone-200/70 bg-stone-100 text-slate-500"
+                            : "border-stone-200/90 bg-white text-slate-900 focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
+                        }`}
                         value={formData.orgName}
                         onChange={(event) => updateFormField("orgName", event.target.value)}
+                        disabled={Boolean(invitePrefill)}
                       />
                     </div>
 
@@ -2569,7 +2726,7 @@ export function AssessmentShell() {
                         onChange={(event) => updateFormField("role", event.target.value as RoleLevel | "")}
                       >
                         <option value="">Select role</option>
-                        {ROLE_OPTIONS.map((roleOption) => (
+                        {availableRoleOptions.map((roleOption) => (
                           <option key={roleOption.value} value={roleOption.value}>
                             {roleOption.label}
                           </option>
@@ -2612,6 +2769,13 @@ export function AssessmentShell() {
                   {entryError ? (
                     <InlineBanner tone="error" message={entryError} onClose={() => setEntryError("")} />
                   ) : null}
+
+                  {inviteLoading ? (
+                    <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading firm invitation...
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -2619,15 +2783,24 @@ export function AssessmentShell() {
                 <div className="flex flex-col gap-2.5 sm:flex-row sm:gap-3">
                   <button
                     type="submit"
-                    disabled={entryLoading}
+                    disabled={entryLoading || inviteLoading}
                     className="inline-flex flex-1 items-center justify-center gap-3 rounded-full bg-blue-900 px-5 py-3 text-[15px] font-bold text-white shadow-[0_16px_38px_rgba(30,64,175,0.28)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70 sm:px-6 sm:py-3.5 sm:text-[16px]"
                   >
-                    {entryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Continue to Questions"}
+                    {entryLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {isDirectorOnboardingFlow ? "Submit" : "Continue to Questions"}
+                      </>
+                    ) : (
+                      <>
+                        {isDirectorOnboardingFlow ? "Submit" : "Continue to Questions"}
+                      </>
+                    )}
                     <ArrowRight className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => navigate("/")}
+                    onClick={handleStartModalCancel}
                     className="inline-flex items-center justify-center rounded-full border border-stone-200 bg-white px-5 py-3 text-[15px] font-semibold text-stone-700 shadow-[0_10px_28px_rgba(15,23,42,0.06)] transition-colors hover:border-stone-300 hover:text-stone-950 sm:py-3.5 sm:text-[16px]"
                   >
                     Cancel
