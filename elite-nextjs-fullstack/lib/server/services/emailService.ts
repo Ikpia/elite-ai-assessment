@@ -1,8 +1,38 @@
+import nodemailer from "nodemailer";
 import { Resend } from "resend";
 
 import { env } from "../config/env";
 import type { ReportData } from "../types/assessment";
 import { HttpError } from "../utils/httpError";
+
+type EmailDeliveryResult = {
+  mode: "mock" | "live";
+  messageId: string | null;
+};
+
+type EmailAttachment = {
+  filename: string;
+  content: Buffer;
+};
+
+type EmailSendParams = {
+  to: string;
+  subject: string;
+  html: string;
+  attachments?: EmailAttachment[];
+  failureMessage: string;
+};
+
+function toErrorDetails(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      stack: error.stack
+    };
+  }
+
+  return error;
+}
 
 function buildReportEmailHtml(reportData: ReportData): string {
   return `
@@ -102,14 +132,78 @@ function buildDirectorInviteEmailHtml(params: {
   `;
 }
 
-export async function sendOrganisationReportEmail(params: {
-  directorEmail: string;
-  filename: string;
-  pdfBuffer: Buffer;
-  reportData: ReportData;
-}): Promise<{ mode: "mock" | "live"; messageId: string | null }> {
-  const { directorEmail, filename, pdfBuffer, reportData } = params;
+function isSmtpConfigured(): boolean {
+  return Boolean(env.smtpHost && env.smtpFromEmail);
+}
 
+function isResendConfigured(): boolean {
+  return Boolean(env.resendApiKey && env.resendFromEmail);
+}
+
+function shouldMockOnFailure(): boolean {
+  return env.nodeEnv !== "production";
+}
+
+function getConfiguredProvider(): "smtp" | "resend" | "mock" {
+  if (isSmtpConfigured()) {
+    return "smtp";
+  }
+
+  if (isResendConfigured()) {
+    return "resend";
+  }
+
+  return "mock";
+}
+
+function getSmtpAuth() {
+  if (!env.smtpUser && !env.smtpPass) {
+    return undefined;
+  }
+
+  if (!env.smtpUser || !env.smtpPass) {
+    throw new Error("SMTP_USER and SMTP_PASS must both be set when SMTP auth is enabled.");
+  }
+
+  return {
+    user: env.smtpUser,
+    pass: env.smtpPass
+  };
+}
+
+async function sendViaSmtp(params: EmailSendParams): Promise<EmailDeliveryResult> {
+  if (!env.smtpHost || !env.smtpFromEmail) {
+    return {
+      mode: "mock",
+      messageId: null
+    };
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: env.smtpHost,
+    port: env.smtpPort,
+    secure: env.smtpSecure,
+    auth: getSmtpAuth()
+  });
+
+  const result = await transporter.sendMail({
+    from: env.smtpFromEmail,
+    to: params.to,
+    subject: params.subject,
+    html: params.html,
+    attachments: params.attachments?.map((attachment) => ({
+      filename: attachment.filename,
+      content: attachment.content
+    }))
+  });
+
+  return {
+    mode: "live",
+    messageId: result.messageId || null
+  };
+}
+
+async function sendViaResend(params: EmailSendParams): Promise<EmailDeliveryResult> {
   if (!env.resendApiKey || !env.resendFromEmail) {
     return {
       mode: "mock",
@@ -120,25 +214,81 @@ export async function sendOrganisationReportEmail(params: {
   const resend = new Resend(env.resendApiKey);
   const { data, error } = await resend.emails.send({
     from: env.resendFromEmail,
-    to: directorEmail,
-    subject: `${reportData.orgName} AI Readiness Assessment Report`,
-    html: buildReportEmailHtml(reportData),
-    attachments: [
-      {
-        filename,
-        content: pdfBuffer.toString("base64")
-      }
-    ]
+    to: params.to,
+    subject: params.subject,
+    html: params.html,
+    attachments: params.attachments?.map((attachment) => ({
+      filename: attachment.filename,
+      content: attachment.content.toString("base64")
+    }))
   });
 
   if (error) {
-    throw new HttpError(502, "Report email delivery failed.", error);
+    throw new HttpError(502, params.failureMessage, error);
   }
 
   return {
     mode: "live",
     messageId: data?.id || null
   };
+}
+
+async function sendWithConfiguredProvider(params: EmailSendParams): Promise<EmailDeliveryResult> {
+  const provider = getConfiguredProvider();
+
+  if (provider === "mock") {
+    return {
+      mode: "mock",
+      messageId: null
+    };
+  }
+
+  try {
+    if (provider === "smtp") {
+      return await sendViaSmtp(params);
+    }
+
+    return await sendViaResend(params);
+  } catch (error) {
+    if (shouldMockOnFailure()) {
+      console.warn(
+        `${provider.toUpperCase()} email delivery failed; falling back to mock mode.`,
+        error
+      );
+      return {
+        mode: "mock",
+        messageId: null
+      };
+    }
+
+    if (error instanceof HttpError) {
+      throw error;
+    }
+
+    throw new HttpError(502, params.failureMessage, toErrorDetails(error));
+  }
+}
+
+export async function sendOrganisationReportEmail(params: {
+  directorEmail: string;
+  filename: string;
+  pdfBuffer: Buffer;
+  reportData: ReportData;
+}): Promise<EmailDeliveryResult> {
+  const { directorEmail, filename, pdfBuffer, reportData } = params;
+
+  return sendWithConfiguredProvider({
+    to: directorEmail,
+    subject: `${reportData.orgName} AI Readiness Assessment Report`,
+    html: buildReportEmailHtml(reportData),
+    attachments: [
+      {
+        filename,
+        content: pdfBuffer
+      }
+    ],
+    failureMessage: "Report email delivery failed."
+  });
 }
 
 export async function sendAdminAccessEmail(params: {
@@ -146,44 +296,19 @@ export async function sendAdminAccessEmail(params: {
   accessLabel: string;
   accessUrl: string;
   expiresInHours: number;
-}): Promise<{ mode: "mock" | "live"; messageId: string | null }> {
+}): Promise<EmailDeliveryResult> {
   const { recipientEmail, accessLabel, accessUrl, expiresInHours } = params;
 
-  if (!env.resendApiKey || !env.resendFromEmail) {
-    return {
-      mode: "mock",
-      messageId: null
-    };
-  }
-
-  const resend = new Resend(env.resendApiKey);
-  const { data, error } = await resend.emails.send({
-    from: env.resendFromEmail,
+  return sendWithConfiguredProvider({
     to: recipientEmail,
     subject: `${accessLabel} admin dashboard access`,
     html: buildAdminAccessEmailHtml({
       accessLabel,
       accessUrl,
       expiresInHours
-    })
+    }),
+    failureMessage: "Admin access email delivery failed."
   });
-
-  if (error) {
-    if (env.nodeEnv !== "production") {
-      console.warn("Admin access email delivery failed; falling back to mock mode.", error);
-      return {
-        mode: "mock",
-        messageId: null
-      };
-    }
-
-    throw new HttpError(502, "Admin access email delivery failed.", error);
-  }
-
-  return {
-    mode: "live",
-    messageId: data?.id || null
-  };
 }
 
 export async function sendDirectorInviteEmail(params: {
@@ -191,42 +316,17 @@ export async function sendDirectorInviteEmail(params: {
   directorName: string;
   orgName: string;
   shareUrl: string;
-}): Promise<{ mode: "mock" | "live"; messageId: string | null }> {
+}): Promise<EmailDeliveryResult> {
   const { directorEmail, directorName, orgName, shareUrl } = params;
 
-  if (!env.resendApiKey || !env.resendFromEmail) {
-    return {
-      mode: "mock",
-      messageId: null
-    };
-  }
-
-  const resend = new Resend(env.resendApiKey);
-  const { data, error } = await resend.emails.send({
-    from: env.resendFromEmail,
+  return sendWithConfiguredProvider({
     to: directorEmail,
     subject: `${orgName} team assessment link`,
     html: buildDirectorInviteEmailHtml({
       directorName,
       orgName,
       shareUrl
-    })
+    }),
+    failureMessage: "Director invite email delivery failed."
   });
-
-  if (error) {
-    if (env.nodeEnv !== "production") {
-      console.warn("Director invite email delivery failed; falling back to mock mode.", error);
-      return {
-        mode: "mock",
-        messageId: null
-      };
-    }
-
-    throw new HttpError(502, "Director invite email delivery failed.", error);
-  }
-
-  return {
-    mode: "live",
-    messageId: data?.id || null
-  };
 }

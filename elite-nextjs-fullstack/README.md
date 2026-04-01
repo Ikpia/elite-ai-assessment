@@ -9,7 +9,7 @@ Next.js fullstack version of the Elite Global AI Readiness Assessment platform.
 - health, assessment, admin, and report APIs
 - MongoDB persistence with Mongoose
 - PDF report generation with `@react-pdf/renderer`
-- Resend email delivery with mock fallback
+- SMTP or Resend email delivery with mock fallback
 - firm-type backfill and organisation identity sync bootstrapped lazily on first server access
 - retention cleanup exposed as a secure cron route for Vercel
 
@@ -44,6 +44,12 @@ SUPER_ADMIN_EMAILS=admin@eliteglobalai.com
 ALLOW_PERSONAL_EMAIL_DOMAINS=true
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=reports@eliteglobalai.com
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM_EMAIL=
 APP_BASE_URL=http://localhost:3000
 REPORT_BENCHMARK_LOCAL=31
 REPORT_BENCHMARK_GLOBAL=68
@@ -64,6 +70,8 @@ npm run dev
 - Deploy `elite-nextjs-fullstack` as a single Next.js project. No separate Express backend deployment is required.
 - Set all environment variables from `.env.example` in Vercel.
 - Add a MongoDB database URI that Vercel can reach.
+- If `SMTP_HOST` and `SMTP_FROM_EMAIL` are set, SMTP is used for email delivery.
+- Otherwise, if `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are set, Resend is used.
 - `NEXT_PUBLIC_API_BASE_URL` can be left empty when the frontend and API run in the same project.
 - The included `vercel.json` schedules retention cleanup through `/api/cron/retention`. Set `CRON_SECRET` in Vercel so only Vercel cron can invoke it.
 
