@@ -26,7 +26,6 @@ export interface SubmissionDraft {
   role: RoleLevel | "";
   dept: string;
   phone: string;
-  attribution: string;
   consentAccepted: boolean;
 }
 

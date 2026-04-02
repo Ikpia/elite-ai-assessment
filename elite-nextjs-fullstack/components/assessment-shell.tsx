@@ -129,6 +129,7 @@ const PUBLIC_DASHBOARD_CACHE_TTL_MS = 30_000;
 const PUBLIC_DASHBOARD_PREFETCH_DELAY_MS = 1200;
 const PROCESSING_SCREEN_MIN_DURATION_MS = 47_000;
 const DIMENSION_TRANSITION_DURATION_MS = 3_000;
+const RESPONDENT_DEFAULT_ROLE: RoleLevel = "manager";
 const FOOTER_SOCIALS = [
   { label: "LinkedIn", href: MARKETING_SITE_URL, icon: Linkedin },
   { label: "Instagram", href: MARKETING_SITE_URL, icon: Instagram },
@@ -142,10 +143,9 @@ const EMPTY_ENTRY_DRAFT: SubmissionDraft = {
   orgName: "",
   email: "",
   name: "",
-  role: "",
+  role: RESPONDENT_DEFAULT_ROLE,
   dept: "",
   phone: "",
-  attribution: "",
   consentAccepted: false
 };
 
@@ -171,24 +171,7 @@ const ADMIN_NOTES = [
   "Generate and send the PDF report only when you are satisfied with the aggregate data."
 ];
 
-const ROLE_OPTIONS: Array<{ value: RoleLevel; label: string }> = [
-  { value: "c-suite", label: "C-Suite / Board" },
-  { value: "director", label: "Director / VP" },
-  { value: "senior-manager", label: "Senior Manager" },
-  { value: "manager", label: "Manager" },
-  { value: "specialist", label: "Specialist" }
-];
-const availableRoleOptions = ROLE_OPTIONS;
 const isDirectorOnboardingFlow = false;
-
-const ATTRIBUTION_OPTIONS = [
-  "Elite Global AI website",
-  "LinkedIn",
-  "Email invitation",
-  "Referral",
-  "Event or webinar",
-  "Other"
-] as const;
 
 const statusBadgeClasses: Record<Organisation["status"], string> = {
   collecting: "border-stone-200 bg-white text-stone-600",
@@ -443,7 +426,7 @@ function getInitialRespondentEntryView(): RespondentEntryView {
     new URL(window.location.href).searchParams.get(ASSESSMENT_INVITE_QUERY_PARAM)?.trim() || "";
   const storedDraft = readStorage<Partial<SubmissionDraft>>(RESPONDENT_STORAGE_KEY, {});
 
-  if (inviteToken || storedDraft.orgName || storedDraft.role) {
+  if (inviteToken || storedDraft.orgName || storedDraft.firmType) {
     return "welcome";
   }
 
@@ -522,20 +505,27 @@ function hasAnswerValue(answer: unknown): boolean {
   return typeof answer === "string" && answer.trim().length > 0;
 }
 
+function normalizeRespondentDraft(draft: Partial<SubmissionDraft> = {}): SubmissionDraft {
+  return {
+    ...EMPTY_ENTRY_DRAFT,
+    ...draft,
+    role: draft.role || RESPONDENT_DEFAULT_ROLE,
+    dept: typeof draft.dept === "string" ? draft.dept : ""
+  };
+}
+
 function isAssessmentContextReady(
   draft: SubmissionDraft
 ): draft is SubmissionDraft & {
   firmType: FirmType;
-  role: RoleLevel;
 } {
-  return Boolean(draft.firmType && draft.orgName.trim() && draft.role);
+  return Boolean(draft.firmType && draft.orgName.trim());
 }
 
 function isCompleteDraft(
   draft: SubmissionDraft
 ): draft is SubmissionDraft & {
   firmType: FirmType;
-  role: RoleLevel;
 } {
   return isAssessmentContextReady(draft);
 }
@@ -682,13 +672,8 @@ function getCompletionRatio(org: Organisation): number | null {
 function buildAnswerOwnerSignature(draft: SubmissionDraft): string {
   return [
     draft.firmType,
-    draft.orgName.trim().toLowerCase(),
-    draft.role
+    draft.orgName.trim().toLowerCase()
   ].join("|");
-}
-
-function getRoleLabel(role: RoleLevel | ""): string {
-  return ROLE_OPTIONS.find((option) => option.value === role)?.label || "";
 }
 
 export function AssessmentShell() {
@@ -701,10 +686,9 @@ export function AssessmentShell() {
   const [backendEnvironment, setBackendEnvironment] = useState("");
   const [backendService, setBackendService] = useState("");
   const [directorForm, setDirectorForm] = useState<DirectorEntryDraft>(EMPTY_DIRECTOR_ENTRY_DRAFT);
-  const [formData, setFormData] = useState<SubmissionDraft>(() => ({
-    ...EMPTY_ENTRY_DRAFT,
-    ...readStorage<Partial<SubmissionDraft>>(RESPONDENT_STORAGE_KEY, {})
-  }));
+  const [formData, setFormData] = useState<SubmissionDraft>(() =>
+    normalizeRespondentDraft(readStorage<Partial<SubmissionDraft>>(RESPONDENT_STORAGE_KEY, {}))
+  );
   const [answers, setAnswers] = useState<AnswerState>(() =>
     readStorage<AnswerState>(ANSWERS_STORAGE_KEY, {})
   );
@@ -1006,18 +990,18 @@ export function AssessmentShell() {
         setRespondentEntryView("welcome");
         setInvitePrefill(prefill);
         setEntryError("");
-        setFormData((current) => ({
-          ...current,
+        setFormData((current) =>
+          normalizeRespondentDraft({
+            ...current,
           firmType: prefill.firmType,
           orgName: prefill.orgName,
           email: "",
           name: "",
-          role: "",
           dept: "",
           phone: "",
-          attribution: "",
           consentAccepted: false
-        }));
+          })
+        );
       })
       .catch((error) => {
         if (!active) {
@@ -1461,11 +1445,6 @@ export function AssessmentShell() {
       return;
     }
 
-    if (!formData.role) {
-      setEntryError("Select your role before continuing.");
-      return;
-    }
-
     setEntryLoading(true);
 
     try {
@@ -1478,7 +1457,7 @@ export function AssessmentShell() {
           }
         : await backendApi.assessment.resolveOrganisation(formData.orgName);
 
-      const nextDraft: SubmissionDraft = {
+      const nextDraft = normalizeRespondentDraft({
         ...formData,
         firmType: resolvedOrganisation.firmType,
         orgName: resolvedOrganisation.orgName,
@@ -1486,18 +1465,17 @@ export function AssessmentShell() {
         name: "",
         dept: "",
         phone: "",
-        attribution: "",
         consentAccepted: false
-      };
-    const nextOwnerSignature = buildAnswerOwnerSignature(nextDraft);
-    const shouldResetAnswers =
-      Boolean(answerOwnerSignature) &&
-      answerOwnerSignature !== nextOwnerSignature &&
-      Object.keys(answers).length > 0;
+      });
+      const nextOwnerSignature = buildAnswerOwnerSignature(nextDraft);
+      const shouldResetAnswers =
+        Boolean(answerOwnerSignature) &&
+        answerOwnerSignature !== nextOwnerSignature &&
+        Object.keys(answers).length > 0;
 
-    if (shouldResetAnswers) {
-      setAnswers({});
-    }
+      if (shouldResetAnswers) {
+        setAnswers({});
+      }
 
       setFormData(nextDraft);
       setAnswerOwnerSignature(nextOwnerSignature);
@@ -1675,10 +1653,9 @@ export function AssessmentShell() {
         orgName: formData.orgName,
         respondentEmail: emailValidation.normalizedEmail,
         respondentName: formData.name,
-        respondentRole: formData.role,
-        respondentDept: formData.dept || null,
+        respondentRole: formData.role || RESPONDENT_DEFAULT_ROLE,
+        respondentDept: null,
         respondentPhone: formData.phone || null,
-        attributionSource: formData.attribution || null,
         consentAccepted: true,
         answers: activeQuestions.map((item) => ({
           questionId: item.id,
@@ -3130,13 +3107,10 @@ export function AssessmentShell() {
         <AssessmentWelcomeScreen
           formData={{
             orgName: formData.orgName,
-            role: formData.role,
-            dept: formData.dept,
             firmType: formData.firmType
           }}
           invitePrefill={invitePrefill}
           firmTypeOptions={FIRM_TYPE_OPTIONS}
-          roleOptions={availableRoleOptions}
           entryLoading={entryLoading}
           inviteLoading={inviteLoading}
           entryError={entryError}
@@ -3145,8 +3119,6 @@ export function AssessmentShell() {
           onDismissEntryNotice={() => setEntryNotice("")}
           onFirmTypeChange={(value) => updateFormField("firmType", value)}
           onOrgNameChange={(value) => updateFormField("orgName", value)}
-          onRoleChange={(value) => updateFormField("role", value)}
-          onDeptChange={(value) => updateFormField("dept", value)}
           onBack={isInviteEntryFlow ? () => navigate("/") : () => setRespondentEntryView("split")}
           onClose={handleStartModalCancel}
           onSubmit={(event) => {
@@ -3196,8 +3168,6 @@ export function AssessmentShell() {
         currentDimensionQuestionsCount={currentDimensionQuestions.length}
         activeFirmTypeLabel={activeFirmTypeLabel}
         orgName={formData.orgName}
-        roleLabel={getRoleLabel(formData.role)}
-        dept={formData.dept}
         submissionError={submissionError}
         onDismissSubmissionError={() => setSubmissionError("")}
         onSelect={handleSelect}
@@ -3229,23 +3199,18 @@ export function AssessmentShell() {
       <AssessmentCompletionDetailsScreen
         orgName={formData.orgName}
         firmType={formData.firmType}
-        roleLabel={getRoleLabel(formData.role)}
-        dept={formData.dept}
         answeredCount={answeredCount}
         totalSteps={totalSteps}
         name={formData.name}
         email={formData.email}
         phone={formData.phone}
-        attribution={formData.attribution}
         consentAccepted={formData.consentAccepted}
-        attributionOptions={ATTRIBUTION_OPTIONS}
         submissionError={submissionError}
         isSubmitting={isSubmitting}
         onDismissSubmissionError={() => setSubmissionError("")}
         onNameChange={(value) => updateFormField("name", value)}
         onEmailChange={(value) => updateFormField("email", value)}
         onPhoneChange={(value) => updateFormField("phone", value)}
-        onAttributionChange={(value) => updateFormField("attribution", value)}
         onConsentChange={(value) => updateFormField("consentAccepted", value)}
         onBack={() => navigate(`/assessment/${totalSteps}`)}
         onClose={handleStartModalCancel}

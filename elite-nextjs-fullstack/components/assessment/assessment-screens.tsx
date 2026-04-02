@@ -22,7 +22,6 @@ import type {
   AssessmentInvitePrefillResponse,
   FirmType,
   Question,
-  RoleLevel,
   SubmissionDraft
 } from "@/lib/shared/types";
 
@@ -54,11 +53,11 @@ export interface DirectorSetupDraft {
 const inputClasses =
   "w-full rounded-[18px] border border-stone-200 bg-white px-4 py-3 text-[15px] font-medium text-slate-900 outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100";
 const primaryButtonClasses =
-  "inline-flex items-center justify-center gap-2 rounded-full bg-blue-900 px-5 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-70";
+  "inline-flex w-full items-center justify-center gap-2 rounded-full bg-blue-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:px-5 sm:py-3";
 const secondaryButtonClasses =
-  "inline-flex items-center justify-center gap-2 rounded-full border border-stone-200 bg-white px-5 py-3 text-sm font-semibold text-stone-700";
+  "inline-flex w-full items-center justify-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 sm:w-auto sm:px-5 sm:py-3";
 const chipClasses =
-  "rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500";
+  "rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.16em] text-slate-500 sm:px-3 sm:text-[10px]";
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -79,6 +78,153 @@ const fadeUpItem = {
     transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] }
   }
 } as const;
+
+const celebrationConfettiPieces = [
+  {
+    id: "confetti-1",
+    left: "6%",
+    top: "0%",
+    className: "h-5 w-2.5 rounded-full bg-amber-300",
+    driftX: -34,
+    fallY: 144,
+    rotateStart: -14,
+    rotateMid: 96,
+    rotateEnd: 194,
+    delay: 0
+  },
+  {
+    id: "confetti-2",
+    left: "14%",
+    top: "2%",
+    className: "h-4 w-4 rounded-[5px] bg-blue-500",
+    driftX: -16,
+    fallY: 128,
+    rotateStart: 12,
+    rotateMid: 132,
+    rotateEnd: 252,
+    delay: 0.18
+  },
+  {
+    id: "confetti-3",
+    left: "23%",
+    top: "0%",
+    className: "h-5 w-2 rounded-full bg-cyan-300",
+    driftX: 26,
+    fallY: 150,
+    rotateStart: -28,
+    rotateMid: 82,
+    rotateEnd: 210,
+    delay: 0.34
+  },
+  {
+    id: "confetti-4",
+    left: "34%",
+    top: "3%",
+    className: "h-3.5 w-3.5 rounded-full bg-rose-300",
+    driftX: -30,
+    fallY: 126,
+    rotateStart: 0,
+    rotateMid: 140,
+    rotateEnd: 240,
+    delay: 0.12
+  },
+  {
+    id: "confetti-5",
+    left: "47%",
+    top: "1%",
+    className: "h-5 w-2.5 rounded-[5px] bg-emerald-300",
+    driftX: 18,
+    fallY: 142,
+    rotateStart: -18,
+    rotateMid: 108,
+    rotateEnd: 236,
+    delay: 0.28
+  },
+  {
+    id: "confetti-6",
+    left: "59%",
+    top: "0%",
+    className: "h-4 w-4 rounded-[5px] bg-fuchsia-300",
+    driftX: 30,
+    fallY: 136,
+    rotateStart: 18,
+    rotateMid: 126,
+    rotateEnd: 248,
+    delay: 0.08
+  },
+  {
+    id: "confetti-7",
+    left: "71%",
+    top: "2%",
+    className: "h-5 w-2 rounded-full bg-orange-300",
+    driftX: -24,
+    fallY: 148,
+    rotateStart: -22,
+    rotateMid: 92,
+    rotateEnd: 218,
+    delay: 0.24
+  },
+  {
+    id: "confetti-8",
+    left: "82%",
+    top: "1%",
+    className: "h-4 w-3 rounded-[5px] bg-sky-300",
+    driftX: 26,
+    fallY: 132,
+    rotateStart: 24,
+    rotateMid: 120,
+    rotateEnd: 228,
+    delay: 0.16
+  },
+  {
+    id: "confetti-9",
+    left: "91%",
+    top: "3%",
+    className: "h-3.5 w-3.5 rounded-full bg-yellow-300",
+    driftX: -18,
+    fallY: 120,
+    rotateStart: 0,
+    rotateMid: 148,
+    rotateEnd: 256,
+    delay: 0.3
+  },
+  {
+    id: "confetti-10",
+    left: "28%",
+    top: "1%",
+    className: "h-4 w-2 rounded-[5px] bg-lime-300",
+    driftX: 22,
+    fallY: 138,
+    rotateStart: -12,
+    rotateMid: 118,
+    rotateEnd: 226,
+    delay: 0.22
+  },
+  {
+    id: "confetti-11",
+    left: "66%",
+    top: "1%",
+    className: "h-4 w-2 rounded-[5px] bg-violet-300",
+    driftX: -20,
+    fallY: 134,
+    rotateStart: 14,
+    rotateMid: 124,
+    rotateEnd: 230,
+    delay: 0.26
+  },
+  {
+    id: "confetti-12",
+    left: "52%",
+    top: "0%",
+    className: "h-5 w-2 rounded-full bg-pink-300",
+    driftX: -8,
+    fallY: 152,
+    rotateStart: -24,
+    rotateMid: 100,
+    rotateEnd: 242,
+    delay: 0.04
+  }
+] as const;
 
 function SurfaceBanner({
   tone,
@@ -122,6 +268,7 @@ function AssessmentModal({
   description,
   onClose,
   children,
+  overlay,
   footer,
   widthClass = "max-w-4xl",
   animationKey = "assessment-modal"
@@ -131,6 +278,7 @@ function AssessmentModal({
   description?: string;
   onClose: () => void;
   children: React.ReactNode;
+  overlay?: React.ReactNode;
   footer?: React.ReactNode;
   widthClass?: string;
   animationKey?: string;
@@ -163,6 +311,8 @@ function AssessmentModal({
             >
               <X className="h-5 w-5" />
             </button>
+
+            {overlay}
 
             <div className="shrink-0 border-b border-stone-200/70 px-5 py-5 pr-16 sm:px-7">
               <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">
@@ -212,6 +362,72 @@ function CompactMetric({
   );
 }
 
+function CelebrationConfetti() {
+  const [burstCycle, setBurstCycle] = React.useState(0);
+
+  React.useEffect(() => {
+    const firstBurst = window.setTimeout(() => setBurstCycle(1), 180);
+    const secondBurst = window.setTimeout(() => setBurstCycle(2), 2560);
+    const thirdBurst = window.setTimeout(() => setBurstCycle(3), 4940);
+    const reset = window.setTimeout(() => setBurstCycle(0), 7820);
+
+    return () => {
+      window.clearTimeout(firstBurst);
+      window.clearTimeout(secondBurst);
+      window.clearTimeout(thirdBurst);
+      window.clearTimeout(reset);
+    };
+  }, []);
+
+  return (
+    <AnimatePresence>
+      {burstCycle > 0 ? (
+        <motion.div
+          aria-hidden="true"
+          key={burstCycle}
+          className="pointer-events-none absolute inset-0 z-[2] overflow-hidden"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { duration: 0.35, ease: "easeOut" } }}
+        >
+          <motion.div
+            className="absolute inset-x-12 top-0 h-24 rounded-full bg-[radial-gradient(circle,rgba(191,219,254,0.95)_0%,rgba(255,255,255,0)_72%)] blur-2xl"
+            initial={{ opacity: 0.2, scale: 0.8 }}
+            animate={{ opacity: [0.3, 0.75, 0.2], scale: [0.8, 1.06, 0.92] }}
+            transition={{ duration: 2.4, ease: "easeOut" }}
+          />
+          <motion.div
+            className="absolute left-1/2 top-8 h-20 w-20 -translate-x-1/2 rounded-full border border-blue-200/80"
+            initial={{ opacity: 0.72, scale: 0.3 }}
+            animate={{ opacity: [0.72, 0], scale: [0.3, 2.2] }}
+            transition={{ duration: 1.1, ease: "easeOut" }}
+          />
+          {celebrationConfettiPieces.map((piece) => (
+            <motion.span
+              key={`${burstCycle}-${piece.id}`}
+              className={`absolute block ${piece.className} shadow-[0_14px_28px_rgba(37,99,235,0.18)]`}
+              style={{ left: piece.left, top: piece.top }}
+              initial={{ opacity: 0, y: -110, rotate: piece.rotateStart, scale: 0.68 }}
+              animate={{
+                opacity: [0, 1, 1, 0.85, 0],
+                y: [-110, -18, piece.fallY + 112, piece.fallY + 244],
+                x: [0, piece.driftX, piece.driftX * -0.38, piece.driftX * 0.18],
+                rotate: [piece.rotateStart, piece.rotateMid, piece.rotateEnd, piece.rotateEnd + 46],
+                scale: [0.68, 1.2, 1, 0.86]
+              }}
+              transition={{
+                duration: 2.45,
+                delay: piece.delay,
+                ease: "linear"
+              }}
+            />
+          ))}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
 function getAssessmentProgressCopy(progress: number, remainingQuestions: number): {
   title: string;
   message: string;
@@ -239,10 +455,10 @@ function getProcessingCopy(progress: number): string {
   }
 
   if (progress >= 55) {
-    return "Your report is taking shape. We are compiling the latest snapshot.";
+    return "Your report is taking shape. We are finalizing your score and report link.";
   }
 
-  return "We are processing your responses and preparing the report.";
+  return "We are processing your responses and preparing your report.";
 }
 
 function formatGeneratedAt(value: string): string {
@@ -267,7 +483,7 @@ export function AssessmentSplitEntryScreen({
   return (
     <AssessmentModal
       eyebrow="Assessment Entry"
-      title="Choose your path"
+      title="Welcome! Please Choose your path"
       description="Stay in this modal and continue."
       onClose={onClose}
       widthClass="max-w-5xl"
@@ -333,7 +549,6 @@ export function AssessmentWelcomeScreen({
   formData,
   invitePrefill,
   firmTypeOptions,
-  roleOptions,
   entryLoading,
   inviteLoading,
   entryError,
@@ -342,16 +557,13 @@ export function AssessmentWelcomeScreen({
   onDismissEntryNotice,
   onFirmTypeChange,
   onOrgNameChange,
-  onRoleChange,
-  onDeptChange,
   onBack,
   onSubmit,
   onClose
 }: {
-  formData: Pick<SubmissionDraft, "orgName" | "role" | "dept" | "firmType">;
+  formData: Pick<SubmissionDraft, "orgName" | "firmType">;
   invitePrefill: AssessmentInvitePrefillResponse | null;
   firmTypeOptions: Array<{ value: FirmType; label: string; description: string }>;
-  roleOptions: Array<{ value: RoleLevel; label: string }>;
   entryLoading: boolean;
   inviteLoading: boolean;
   entryError: string;
@@ -360,8 +572,6 @@ export function AssessmentWelcomeScreen({
   onDismissEntryNotice: () => void;
   onFirmTypeChange: (value: FirmType) => void;
   onOrgNameChange: (value: string) => void;
-  onRoleChange: (value: RoleLevel | "") => void;
-  onDeptChange: (value: string) => void;
   onBack: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
@@ -372,7 +582,7 @@ export function AssessmentWelcomeScreen({
     <AssessmentModal
       eyebrow={isInviteFlow ? "Team Invite" : "Respondent"}
       title="Start the assessment"
-      description="Add your team context to continue."
+      description="Add your organisation context to continue."
       onClose={onClose}
       widthClass="max-w-3xl"
       animationKey={isInviteFlow ? "respondent-entry-invite" : "respondent-entry"}
@@ -389,7 +599,7 @@ export function AssessmentWelcomeScreen({
             className={`${primaryButtonClasses} sm:flex-1`}
           >
             {entryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Continue
+          className="space-y-4"
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>
@@ -445,37 +655,6 @@ export function AssessmentWelcomeScreen({
               }`}
             />
           </div>
-
-          <div className="space-y-2">
-            <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
-              Role Level
-            </label>
-            <select
-              value={formData.role}
-              onChange={(event) => onRoleChange(event.target.value as RoleLevel | "")}
-              className={inputClasses}
-            >
-              <option value="">Select role</option>
-              {roleOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
-              Department
-            </label>
-            <input
-              type="text"
-              placeholder="Department or function"
-              value={formData.dept}
-              onChange={(event) => onDeptChange(event.target.value)}
-              className={inputClasses}
-            />
-          </div>
         </motion.div>
 
         {inviteLoading ? (
@@ -511,8 +690,6 @@ export function AssessmentQuestionScreen({
   currentDimensionQuestionsCount,
   activeFirmTypeLabel,
   orgName,
-  roleLabel,
-  dept,
   submissionError,
   onDismissSubmissionError,
   onSelect,
@@ -532,8 +709,6 @@ export function AssessmentQuestionScreen({
   currentDimensionQuestionsCount: number;
   activeFirmTypeLabel: string;
   orgName: string;
-  roleLabel: string;
-  dept: string;
   submissionError: string;
   onDismissSubmissionError: () => void;
   onSelect: (value: string) => void;
@@ -561,29 +736,29 @@ export function AssessmentQuestionScreen({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -18 }}
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-      className="h-screen overflow-hidden bg-[#F9F8F4] px-3 py-2 text-slate-900 sm:px-4 sm:py-3 lg:px-5"
+      className="min-h-[100dvh] overflow-x-hidden bg-[#F9F8F4] px-2 py-2 text-slate-900 sm:px-3 sm:py-3 lg:h-screen lg:overflow-hidden lg:px-5"
     >
-      <div className="mx-auto flex h-full max-w-[min(96vw,1400px)] flex-col">
+      <div className="mx-auto flex min-h-[calc(100dvh-1rem)] max-w-[min(96vw,1400px)] flex-col lg:h-full lg:min-h-0">
         <motion.header
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-          className="mb-2 rounded-[24px] border border-stone-200 bg-white px-4 py-2.5 shadow-sm sm:px-5"
+          className="mb-2 rounded-[24px] border border-stone-200 bg-white px-3 py-3 shadow-sm sm:px-5"
         >
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-base font-serif font-bold text-white shadow-sm">
                 E
               </div>
-              <div>
-                <p className="font-serif text-[1.12rem] font-bold leading-none text-slate-950 sm:text-[1.28rem]">
+              <div className="min-w-0">
+                <p className="font-serif text-[1rem] font-bold leading-tight text-slate-950 sm:text-[1.18rem] lg:text-[1.28rem]">
                   Elite Global AI <span className="font-normal text-slate-500">Assessment</span>
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-blue-100 bg-white px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-500">
+            <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
+              <span className="rounded-full border border-blue-100 bg-white px-3 py-1.5 text-center text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-500 sm:w-auto">
                 Question {currentStep} of {totalSteps}
               </span>
               <button type="button" onClick={onClose} className={primaryButtonClasses}>
@@ -597,22 +772,20 @@ export function AssessmentQuestionScreen({
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.04, duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-          className="mb-2 rounded-[22px] border border-stone-200 bg-white p-3 shadow-sm"
+          className="mb-2 rounded-[22px] border border-stone-200 bg-white p-3 shadow-sm sm:p-4"
         >
-          <div className="grid gap-3 lg:grid-cols-[1.5fr_0.7fr] lg:items-center">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.7fr)] xl:items-center">
             <div>
               <div className="flex flex-wrap gap-2">
                 <span className={chipClasses}>{activeFirmTypeLabel}</span>
-                <span className={chipClasses}>{roleLabel}</span>
-                {dept.trim() ? <span className={chipClasses}>{dept}</span> : null}
               </div>
 
-              <p className="mt-2 text-[12px] font-medium text-slate-600">
+              <p className="mt-2 text-[11px] font-medium leading-5 text-slate-600 sm:text-[12px]">
                 {orgName} · Section {currentDimensionIndex + 1}/{currentDimensionQuestionsCount} · {answeredCount} answered
               </p>
             </div>
 
-            <div className="rounded-[18px] border border-blue-100 bg-[linear-gradient(135deg,rgba(239,246,255,0.96)_0%,rgba(255,255,255,0.98)_100%)] p-3">
+            <div className="rounded-[18px] border border-blue-100 bg-[linear-gradient(135deg,rgba(239,246,255,0.96)_0%,rgba(255,255,255,0.98)_100%)] p-3 sm:p-3.5">
               <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
                 <span>Progress</span>
                 <span>{overallProgress}%</span>
@@ -637,7 +810,7 @@ export function AssessmentQuestionScreen({
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-          className="flex min-h-0 flex-1 flex-col rounded-[24px] border border-stone-200 bg-white p-3 shadow-sm"
+          className="flex min-h-0 flex-1 flex-col rounded-[24px] border border-stone-200 bg-white p-3 shadow-sm sm:p-4"
         >
           <div className="flex min-h-0 flex-1 flex-col gap-3">
             <div>
@@ -649,26 +822,26 @@ export function AssessmentQuestionScreen({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -8 }}
                     transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                    className="mb-3 rounded-[14px] border border-blue-100 bg-blue-50 px-3 py-2 text-[12px] leading-5 text-blue-800"
+                    className="mb-3 rounded-[14px] border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] leading-5 text-blue-800 sm:text-[12px]"
                   >
                     <span className="font-semibold">{progressCopy.title}:</span> {progressCopy.message}
                   </motion.div>
                 </AnimatePresence>
               ) : null}
 
-              <h1 className="font-serif text-[1.02rem] font-bold leading-[1.12] tracking-[-0.01em] text-slate-950 sm:text-[1.08rem] lg:text-[1.16rem] xl:text-[1.22rem]">
+              <h1 className="break-words font-serif text-[0.96rem] font-bold leading-[1.14] tracking-[-0.01em] text-slate-950 sm:text-[1.06rem] md:text-[1.14rem] lg:text-[1.18rem] xl:text-[1.24rem]">
                 {question.text}
               </h1>
-              <p className="mt-2 text-[12px] font-medium leading-5 text-slate-700">{instruction}</p>
+              <p className="mt-2 text-[11px] font-medium leading-5 text-slate-700 sm:text-[12px]">{instruction}</p>
             </div>
 
             <motion.div
               variants={staggerContainer}
               initial="hidden"
               animate="visible"
-              className="min-h-0 flex-1 overflow-y-auto pr-1"
+              className="min-h-0 flex-1 overflow-y-auto pr-0 sm:pr-1"
             >
-              <div className="grid gap-2.5 lg:grid-cols-2">
+              <div className="grid gap-2.5 xl:grid-cols-2">
                 {question.options.map((option, index) => {
                   const selected = question.multiSelect
                     ? Array.isArray(currentAnswer) && currentAnswer.includes(option.value)
@@ -683,22 +856,22 @@ export function AssessmentQuestionScreen({
                       variants={fadeUpItem}
                       whileHover={{ y: -2 }}
                       whileTap={{ scale: 0.995 }}
-                      className={`w-full rounded-[18px] border px-3 py-3 text-left transition-all ${
+                      className={`w-full rounded-[18px] border px-3 py-3 text-left transition-all sm:px-4 ${
                         selected
                           ? "border-blue-500 bg-blue-50 shadow-[0_10px_24px_rgba(37,99,235,0.12)]"
                           : "border-stone-200 bg-white hover:border-blue-200 hover:bg-blue-50/35"
                       }`}
                     >
-                      <div className="flex items-start gap-2.5">
-                        <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[10px] font-extrabold ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-stone-50 text-slate-500"}`}>
+                      <div className="flex items-start gap-2 sm:gap-2.5">
+                        <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[10px] font-extrabold sm:h-8 sm:w-8 sm:text-[11px] ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-stone-50 text-slate-500"}`}>
                           {marker}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between">
-                            <p className="text-[12px] font-bold leading-[1.35] text-slate-900 sm:text-[12.5px]">
+                          <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
+                            <p className="text-[11.5px] font-bold leading-[1.4] text-slate-900 sm:text-[12.5px] md:text-[13px]">
                               {option.label}
                             </p>
-                            <span className={`inline-flex min-w-[74px] items-center justify-center rounded-full border px-2.5 py-0.5 text-[8px] font-extrabold uppercase tracking-[0.14em] ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-white text-slate-400"}`}>
+                            <span className={`inline-flex min-w-[74px] self-start items-center justify-center rounded-full border px-2.5 py-0.5 text-[7px] font-extrabold uppercase tracking-[0.14em] sm:text-[8px] xl:self-auto ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-white text-slate-400"}`}>
                               {selected ? "Selected" : question.multiSelect ? "Add" : "Select"}
                             </span>
                           </div>
@@ -717,7 +890,7 @@ export function AssessmentQuestionScreen({
             </div>
           ) : null}
 
-          <div className="mt-3 flex flex-col gap-3 border-t border-stone-200 pt-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-3 grid gap-3 border-t border-stone-200 pt-3 sm:flex sm:items-center sm:justify-between">
             <button type="button" onClick={onBack} className={secondaryButtonClasses}>
               <ChevronLeft className="h-4 w-4" />
               Back
@@ -795,23 +968,18 @@ export function AssessmentDimensionTransitionScreen({
 export function AssessmentCompletionDetailsScreen({
   orgName,
   firmType,
-  roleLabel,
-  dept,
   answeredCount,
   totalSteps,
   name,
   email,
   phone,
-  attribution,
   consentAccepted,
-  attributionOptions,
   submissionError,
   isSubmitting,
   onDismissSubmissionError,
   onNameChange,
   onEmailChange,
   onPhoneChange,
-  onAttributionChange,
   onConsentChange,
   onBack,
   onSubmit,
@@ -819,23 +987,18 @@ export function AssessmentCompletionDetailsScreen({
 }: {
   orgName: string;
   firmType: FirmType;
-  roleLabel: string;
-  dept: string;
   answeredCount: number;
   totalSteps: number;
   name: string;
   email: string;
   phone: string;
-  attribution: string;
   consentAccepted: boolean;
-  attributionOptions: readonly string[];
   submissionError: string;
   isSubmitting: boolean;
   onDismissSubmissionError: () => void;
   onNameChange: (value: string) => void;
   onEmailChange: (value: string) => void;
   onPhoneChange: (value: string) => void;
-  onAttributionChange: (value: string) => void;
   onConsentChange: (value: boolean) => void;
   onBack: () => void;
   onSubmit: () => void;
@@ -863,9 +1026,8 @@ export function AssessmentCompletionDetailsScreen({
       }
     >
       <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="space-y-4">
-        <motion.div variants={fadeUpItem} className="grid gap-3 sm:grid-cols-3">
+        <motion.div variants={fadeUpItem} className="grid gap-3 sm:grid-cols-2">
           <CompactMetric label="Organisation" value={orgName} hint={getFirmTypeLabel(firmType)} />
-          <CompactMetric label="Role" value={roleLabel} hint={dept || "Department optional"} />
           <CompactMetric
             label="Progress"
             value={`${answeredCount}/${totalSteps}`}
@@ -891,19 +1053,6 @@ export function AssessmentCompletionDetailsScreen({
               Phone Number
             </label>
             <input type="tel" value={phone} onChange={(event) => onPhoneChange(event.target.value)} placeholder="Optional" className={inputClasses} />
-          </div>
-          <div className="space-y-2">
-            <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
-              Attribution
-            </label>
-            <select value={attribution} onChange={(event) => onAttributionChange(event.target.value)} className={inputClasses}>
-              <option value="">Optional</option>
-              {attributionOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
           </div>
         </motion.div>
 
@@ -1033,17 +1182,18 @@ export function AssessmentFinalResultScreen({
 }) {
   const deliveryCopy =
     lastSubmission?.deliveryMode === "mock"
-      ? "Email delivery is in mock mode here, but the secure report link is ready now."
+      ? "Your secure report link is ready now."
       : `Your report was emailed to ${lastSubmission?.recipientEmail}.`;
 
   return (
     <AssessmentModal
       eyebrow="Report Ready"
-      title="Report ready"
-      description="Open your live organisation snapshot below."
+      title="Your Report Is Ready"
+      description="Congratulations. You can now view your report."
       onClose={onClose}
       widthClass="max-w-4xl"
       animationKey="assessment-result"
+      overlay={lastSubmission ? <CelebrationConfetti /> : undefined}
       footer={
         <div className="flex flex-col gap-3 sm:flex-row">
           <button type="button" onClick={onStartAnother} className={secondaryButtonClasses}>
@@ -1065,12 +1215,16 @@ export function AssessmentFinalResultScreen({
       }
     >
       {lastSubmission ? (
-        <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="space-y-4">
-          <motion.div variants={fadeUpItem} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <CompactMetric label="Organisation" value={lastSubmission.orgName} hint={getFirmTypeLabel(lastSubmission.firmType)} />
-            <CompactMetric label="Latest Snapshot" value={`${lastSubmission.latestTotalScore.toFixed(1)}/100`} hint={lastSubmission.latestReadinessLevel} />
-            <CompactMetric label="Your Response" value={`${lastSubmission.respondentTotalScore}/100`} hint={lastSubmission.respondentReadinessLevel} />
-            <CompactMetric label="Responses" value={String(lastSubmission.submissionCount)} hint={formatGeneratedAt(lastSubmission.generatedAt)} />
+        <div>
+          <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="relative z-[1] space-y-4">
+          <motion.div
+            variants={fadeUpItem}
+            className="rounded-[24px] border border-blue-100 bg-[linear-gradient(180deg,rgba(239,246,255,0.9)_0%,rgba(255,255,255,0.96)_100%)] p-4"
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <CompactMetric label="Organisation" value={lastSubmission.orgName} hint={getFirmTypeLabel(lastSubmission.firmType)} />
+              <CompactMetric label="Your Score" value={`${lastSubmission.respondentTotalScore}/100`} hint={lastSubmission.respondentReadinessLevel} />
+            </div>
           </motion.div>
 
           <motion.div variants={fadeUpItem} className="rounded-[20px] border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-slate-700">
@@ -1081,12 +1235,13 @@ export function AssessmentFinalResultScreen({
           </motion.div>
 
           <motion.div variants={fadeUpItem} className="rounded-[20px] border border-stone-200 bg-stone-50 p-4 text-sm leading-6 text-slate-600">
-            This link updates as new team responses arrive.
+            Use the report link above to review your submitted result.
           </motion.div>
-        </motion.div>
+          </motion.div>
+        </div>
       ) : (
         <div className="rounded-[20px] border border-stone-200 bg-stone-50 p-6 text-center text-sm text-slate-600">
-          The report link is no longer in local session storage. Start another response to generate a new live snapshot.
+          The report link is no longer in local session storage. Start another response to generate a new report link.
         </div>
       )}
     </AssessmentModal>
