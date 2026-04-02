@@ -20,7 +20,9 @@ export interface SubmissionDocument extends Document {
   respondentEmail: string;
   respondentName: string;
   respondentRole: RoleLevel;
-  respondentDept: string;
+  respondentDept: string | null;
+  respondentPhone: string | null;
+  attributionSource: string | null;
   consentAcceptedAt: Date;
   answers: ScoredAnswerRecord[];
   dimensionScores: DimensionScores;
@@ -83,7 +85,9 @@ const submissionSchema = new Schema<SubmissionDocument>(
       enum: ROLE_LEVELS,
       required: true
     },
-    respondentDept: { type: String, required: true, trim: true },
+    respondentDept: { type: String, default: null, trim: true },
+    respondentPhone: { type: String, default: null, trim: true },
+    attributionSource: { type: String, default: null, trim: true },
     consentAcceptedAt: { type: Date, required: true },
     answers: { type: [scoredAnswerSchema], required: true },
     dimensionScores: { type: dimensionScoresSchema, required: true },

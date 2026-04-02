@@ -31,6 +31,17 @@ import {
   X
 } from "lucide-react";
 
+import {
+  AssessmentCompletionDetailsScreen,
+  AssessmentDimensionTransitionScreen,
+  AssessmentFinalResultScreen,
+  AssessmentProcessingScreen,
+  AssessmentQuestionScreen,
+  AssessmentSplitEntryScreen,
+  AssessmentWelcomeScreen,
+  DirectorSetupScreen,
+  type AssessmentResultSnapshot
+} from "./assessment/assessment-screens";
 import { PerformanceMetricDiagram, SurfaceCodeDiagram } from "@/components/diagrams";
 import { SpinningGlobeScene } from "@/components/quantum-scene";
 import { ApiError, buildApiUrl, type AdminAuthCredential } from "@/lib/api";
@@ -44,6 +55,7 @@ import {
   getQuestionsForFirmType
 } from "@/lib/shared/questions";
 import type {
+  AssessmentCompleteResponse,
   AssessmentInvitePrefillResponse,
   FirmType,
   Organisation,
@@ -56,26 +68,31 @@ type AppRoute =
   | { name: "landing" }
   | { name: "dashboard" }
   | { name: "start" }
+  | { name: "director-setup" }
   | { name: "assessment"; step: number }
-  | { name: "complete" }
+  | { name: "assessment-details" }
+  | { name: "assessment-processing" }
+  | { name: "assessment-result" }
   | { name: "admin" };
 
 type AnswerState = Record<number, string | string[]>;
 type BackendStatus = "checking" | "connected" | "offline";
 type AdminAccessScope = "super-admin" | "organisation-admin";
+type RespondentEntryView = "split" | "welcome";
 type AdminSessionAuth = AdminAuthCredential & {
   directorEmail?: string;
   accessScope?: AdminAccessScope;
 };
 
-interface LastSubmissionSnapshot {
-  organisationId: string;
-  organisationKey: string;
+type LastSubmissionSnapshot = AssessmentResultSnapshot;
+
+interface DirectorEntryDraft {
   firmType: FirmType;
   orgName: string;
-  totalScore: number;
-  readinessLevel: string;
-  submissionCount: number;
+  email: string;
+  name: string;
+  dept: string;
+  consentAccepted: boolean;
 }
 
 interface AdminDraft {
@@ -108,9 +125,10 @@ const ASSESSMENT_INVITE_QUERY_PARAM = "invite";
 const MARKETING_SITE_URL = (
   process.env.NEXT_PUBLIC_MARKETING_SITE_URL || "https://eliteglobalai.com"
 ).replace(/\/$/, "");
-const COMPLETION_REDIRECT_DELAY_MS = 6000;
 const PUBLIC_DASHBOARD_CACHE_TTL_MS = 30_000;
 const PUBLIC_DASHBOARD_PREFETCH_DELAY_MS = 1200;
+const PROCESSING_SCREEN_MIN_DURATION_MS = 47_000;
+const DIMENSION_TRANSITION_DURATION_MS = 3_000;
 const FOOTER_SOCIALS = [
   { label: "LinkedIn", href: MARKETING_SITE_URL, icon: Linkedin },
   { label: "Instagram", href: MARKETING_SITE_URL, icon: Instagram },
@@ -125,6 +143,17 @@ const EMPTY_ENTRY_DRAFT: SubmissionDraft = {
   email: "",
   name: "",
   role: "",
+  dept: "",
+  phone: "",
+  attribution: "",
+  consentAccepted: false
+};
+
+const EMPTY_DIRECTOR_ENTRY_DRAFT: DirectorEntryDraft = {
+  firmType: DEFAULT_FIRM_TYPE,
+  orgName: "",
+  email: "",
+  name: "",
   dept: "",
   consentAccepted: false
 };
@@ -143,11 +172,23 @@ const ADMIN_NOTES = [
 ];
 
 const ROLE_OPTIONS: Array<{ value: RoleLevel; label: string }> = [
-  { value: "director", label: "Director" },
-  { value: "c-suite", label: "C-Suite" },
+  { value: "c-suite", label: "C-Suite / Board" },
+  { value: "director", label: "Director / VP" },
+  { value: "senior-manager", label: "Senior Manager" },
   { value: "manager", label: "Manager" },
-  { value: "ic", label: "Individual Contributor" }
+  { value: "specialist", label: "Specialist" }
 ];
+const availableRoleOptions = ROLE_OPTIONS;
+const isDirectorOnboardingFlow = false;
+
+const ATTRIBUTION_OPTIONS = [
+  "Elite Global AI website",
+  "LinkedIn",
+  "Email invitation",
+  "Referral",
+  "Event or webinar",
+  "Other"
+] as const;
 
 const statusBadgeClasses: Record<Organisation["status"], string> = {
   collecting: "border-stone-200 bg-white text-stone-600",
@@ -244,12 +285,24 @@ function parseRoute(pathname: string): AppRoute {
     return { name: "start" };
   }
 
+  if (normalizedPath === "/director-setup") {
+    return { name: "director-setup" };
+  }
+
   if (normalizedPath === "/dashboard") {
     return { name: "dashboard" };
   }
 
-  if (normalizedPath === "/complete") {
-    return { name: "complete" };
+  if (normalizedPath === "/assessment/details") {
+    return { name: "assessment-details" };
+  }
+
+  if (normalizedPath === "/assessment/processing") {
+    return { name: "assessment-processing" };
+  }
+
+  if (normalizedPath === "/assessment/result") {
+    return { name: "assessment-result" };
   }
 
   if (normalizedPath === "/admin") {
@@ -302,6 +355,99 @@ function removeStorage(key: string) {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(key);
   }
+}
+
+function readStoredLastSubmission(): LastSubmissionSnapshot | null {
+  const stored = readStorage<
+    | (Partial<LastSubmissionSnapshot> & {
+        totalScore?: number;
+        readinessLevel?: string;
+      })
+    | null
+  >(LAST_SUBMISSION_STORAGE_KEY, null);
+
+  if (!stored || typeof stored !== "object") {
+    return null;
+  }
+
+  const fallbackScore =
+    typeof stored.totalScore === "number" ? stored.totalScore : undefined;
+  const fallbackReadinessLevel =
+    typeof stored.readinessLevel === "string" ? stored.readinessLevel : undefined;
+  const latestTotalScore =
+    typeof stored.latestTotalScore === "number"
+      ? stored.latestTotalScore
+      : fallbackScore;
+  const latestReadinessLevel =
+    typeof stored.latestReadinessLevel === "string"
+      ? stored.latestReadinessLevel
+      : latestTotalScore !== undefined
+        ? getReadinessLabel(latestTotalScore)
+        : fallbackReadinessLevel;
+  const respondentTotalScore =
+    typeof stored.respondentTotalScore === "number"
+      ? stored.respondentTotalScore
+      : fallbackScore;
+  const respondentReadinessLevel =
+    typeof stored.respondentReadinessLevel === "string"
+      ? stored.respondentReadinessLevel
+      : respondentTotalScore !== undefined
+        ? getReadinessLabel(respondentTotalScore)
+        : fallbackReadinessLevel;
+
+  if (
+    typeof stored.organisationId !== "string" ||
+    typeof stored.organisationKey !== "string" ||
+    typeof stored.firmType !== "string" ||
+    typeof stored.orgName !== "string" ||
+    latestTotalScore === undefined ||
+    !latestReadinessLevel ||
+    respondentTotalScore === undefined ||
+    !respondentReadinessLevel ||
+    typeof stored.submissionCount !== "number" ||
+    typeof stored.recipientEmail !== "string" ||
+    typeof stored.reportViewUrl !== "string" ||
+    typeof stored.generatedAt !== "string" ||
+    (stored.deliveryMode !== "mock" && stored.deliveryMode !== "live")
+  ) {
+    return null;
+  }
+
+  return {
+    organisationId: stored.organisationId,
+    organisationKey: stored.organisationKey,
+    firmType: stored.firmType as FirmType,
+    orgName: stored.orgName,
+    latestTotalScore,
+    latestReadinessLevel,
+    respondentTotalScore,
+    respondentReadinessLevel,
+    submissionCount: stored.submissionCount,
+    recipientEmail: stored.recipientEmail,
+    reportViewUrl: stored.reportViewUrl,
+    generatedAt: stored.generatedAt,
+    deliveryMode: stored.deliveryMode
+  };
+}
+
+function getInitialRespondentEntryView(): RespondentEntryView {
+  if (typeof window === "undefined") {
+    return "split";
+  }
+
+  if (parseRoute(window.location.pathname).name !== "start") {
+    return "split";
+  }
+
+  const inviteToken =
+    new URL(window.location.href).searchParams.get(ASSESSMENT_INVITE_QUERY_PARAM)?.trim() || "";
+  const storedDraft = readStorage<Partial<SubmissionDraft>>(RESPONDENT_STORAGE_KEY, {});
+
+  if (inviteToken || storedDraft.orgName || storedDraft.role) {
+    return "welcome";
+  }
+
+  return "split";
 }
 
 function readStoredAdminAuth(): AdminSessionAuth | null {
@@ -376,20 +522,28 @@ function hasAnswerValue(answer: unknown): boolean {
   return typeof answer === "string" && answer.trim().length > 0;
 }
 
-function isCompleteDraft(
+function isAssessmentContextReady(
   draft: SubmissionDraft
-): draft is Omit<SubmissionDraft, "firmType" | "role" | "consentAccepted"> & {
+): draft is SubmissionDraft & {
   firmType: FirmType;
   role: RoleLevel;
-  consentAccepted: true;
 } {
+  return Boolean(draft.firmType && draft.orgName.trim() && draft.role);
+}
+
+function isCompleteDraft(
+  draft: SubmissionDraft
+): draft is SubmissionDraft & {
+  firmType: FirmType;
+  role: RoleLevel;
+} {
+  return isAssessmentContextReady(draft);
+}
+
+function isRespondentDetailsReady(draft: SubmissionDraft): boolean {
   return Boolean(
-    draft.firmType &&
-      draft.orgName.trim() &&
+    draft.name.trim() &&
       draft.email.trim() &&
-      draft.name.trim() &&
-      draft.role &&
-      draft.dept.trim() &&
       draft.consentAccepted
   );
 }
@@ -529,11 +683,12 @@ function buildAnswerOwnerSignature(draft: SubmissionDraft): string {
   return [
     draft.firmType,
     draft.orgName.trim().toLowerCase(),
-    draft.email.trim().toLowerCase(),
-    draft.name.trim().toLowerCase(),
-    draft.role,
-    draft.dept.trim().toLowerCase()
+    draft.role
   ].join("|");
+}
+
+function getRoleLabel(role: RoleLevel | ""): string {
+  return ROLE_OPTIONS.find((option) => option.value === role)?.label || "";
 }
 
 export function AssessmentShell() {
@@ -545,6 +700,7 @@ export function AssessmentShell() {
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("checking");
   const [backendEnvironment, setBackendEnvironment] = useState("");
   const [backendService, setBackendService] = useState("");
+  const [directorForm, setDirectorForm] = useState<DirectorEntryDraft>(EMPTY_DIRECTOR_ENTRY_DRAFT);
   const [formData, setFormData] = useState<SubmissionDraft>(() => ({
     ...EMPTY_ENTRY_DRAFT,
     ...readStorage<Partial<SubmissionDraft>>(RESPONDENT_STORAGE_KEY, {})
@@ -552,11 +708,14 @@ export function AssessmentShell() {
   const [answers, setAnswers] = useState<AnswerState>(() =>
     readStorage<AnswerState>(ANSWERS_STORAGE_KEY, {})
   );
-  const [lastSubmission, setLastSubmission] = useState<LastSubmissionSnapshot | null>(() =>
-    readStorage<LastSubmissionSnapshot | null>(LAST_SUBMISSION_STORAGE_KEY, null)
+  const [lastSubmission, setLastSubmission] = useState<LastSubmissionSnapshot | null>(
+    readStoredLastSubmission
   );
   const [answerOwnerSignature, setAnswerOwnerSignature] = useState(() =>
     readStorage<string>(ANSWER_OWNER_STORAGE_KEY, "")
+  );
+  const [respondentEntryView, setRespondentEntryView] = useState<RespondentEntryView>(
+    getInitialRespondentEntryView
   );
   const [entryError, setEntryError] = useState("");
   const [entryLoading, setEntryLoading] = useState(false);
@@ -604,10 +763,20 @@ export function AssessmentShell() {
     null
   );
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [dimensionTransition, setDimensionTransition] = useState<{
+    completedDimension: string;
+    nextDimension: string;
+    observation: string;
+    nextStep: number;
+  } | null>(null);
+  const [autoAdvanceQuestionId, setAutoAdvanceQuestionId] = useState<number | null>(null);
+  const [processingProgress, setProcessingProgress] = useState(0);
+  const [processingDimensionIndex, setProcessingDimensionIndex] = useState(0);
   const assessmentViewportRef = useRef<HTMLDivElement | null>(null);
   const assessmentContentRef = useRef<HTMLDivElement | null>(null);
   const [assessmentScale, setAssessmentScale] = useState(1);
   const [assessmentScaledHeight, setAssessmentScaledHeight] = useState<number | null>(null);
+  const autoAdvanceTimeoutRef = useRef<number | null>(null);
 
   const activeQuestions = useMemo(
     () => getQuestionsForFirmType(formData.firmType || DEFAULT_FIRM_TYPE),
@@ -623,6 +792,14 @@ export function AssessmentShell() {
   );
   const currentAnswer = question ? answers[question.id] : undefined;
   const currentQuestionAnswered = hasAnswerValue(currentAnswer);
+
+  useEffect(() => {
+    return () => {
+      if (autoAdvanceTimeoutRef.current !== null) {
+        window.clearTimeout(autoAdvanceTimeoutRef.current);
+      }
+    };
+  }, []);
   const currentDimensionQuestions = question
     ? activeQuestions.filter((item) => item.dimension === question.dimension)
     : [];
@@ -630,7 +807,18 @@ export function AssessmentShell() {
     ? currentDimensionQuestions.findIndex((item) => item.id === question.id)
     : -1;
   const apiHealthUrl = buildApiUrl(BACKEND_ENDPOINTS.health.check);
-  const isLandingSurface = route.name === "landing" || route.name === "start";
+  const isLandingRoute = route.name === "landing";
+  const isStandaloneAssessmentRoute = route.name === "assessment";
+  const isRespondentAssessmentModalRoute =
+    route.name === "assessment-details" ||
+    route.name === "assessment-processing" ||
+    route.name === "assessment-result";
+  const isRespondentAssessmentRoute =
+    isStandaloneAssessmentRoute || isRespondentAssessmentModalRoute;
+  const isAssessmentModalRoute =
+    isRespondentAssessmentModalRoute || route.name === "start" || route.name === "director-setup";
+  const isAssessmentExperienceRoute = isStandaloneAssessmentRoute || isAssessmentModalRoute;
+  const showLandingBackdrop = isLandingRoute || isAssessmentModalRoute;
 
   useEffect(() => {
     setHasMounted(true);
@@ -667,32 +855,14 @@ export function AssessmentShell() {
 
     const previousOverflow = document.body.style.overflow;
 
-    if (route.name === "start" || menuOpen) {
+    if (menuOpen || isAssessmentModalRoute) {
       document.body.style.overflow = "hidden";
     }
 
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [route, menuOpen]);
-
-  useEffect(() => {
-    if (route.name !== "start") {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !inviteEntryLocked) {
-        navigate("/");
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [route, inviteEntryLocked]);
+  }, [menuOpen, isAssessmentModalRoute]);
 
   useEffect(() => {
     if (!entryNotice) {
@@ -768,7 +938,12 @@ export function AssessmentShell() {
   }, [adminAuth]);
 
   useEffect(() => {
-    if (route.name === "assessment" && !isCompleteDraft(formData)) {
+    if (
+      (route.name === "assessment" ||
+        route.name === "assessment-details" ||
+        route.name === "assessment-processing") &&
+      !isAssessmentContextReady(formData)
+    ) {
       navigate("/start", true);
     }
   }, [route, formData]);
@@ -828,6 +1003,7 @@ export function AssessmentShell() {
           return;
         }
 
+        setRespondentEntryView("welcome");
         setInvitePrefill(prefill);
         setEntryError("");
         setFormData((current) => ({
@@ -838,6 +1014,8 @@ export function AssessmentShell() {
           name: "",
           role: "",
           dept: "",
+          phone: "",
+          attribution: "",
           consentAccepted: false
         }));
       })
@@ -891,14 +1069,41 @@ export function AssessmentShell() {
   }, [route.name, publicDashboard, publicDashboardFetchedAt]);
 
   useEffect(() => {
-    if (route.name !== "complete") {
+    if (route.name !== "assessment-processing") {
+      setProcessingProgress(0);
+      setProcessingDimensionIndex(0);
       return;
     }
-    const timer = window.setTimeout(() => {
-      window.location.assign(MARKETING_SITE_URL);
-    }, COMPLETION_REDIRECT_DELAY_MS);
-    return () => window.clearTimeout(timer);
+
+    const startedAt = Date.now();
+    const interval = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const progress = Math.min(100, (elapsed / PROCESSING_SCREEN_MIN_DURATION_MS) * 100);
+      const nextIndex = Math.min(
+        4,
+        Math.floor((elapsed / PROCESSING_SCREEN_MIN_DURATION_MS) * 5)
+      );
+
+      setProcessingProgress(progress);
+      setProcessingDimensionIndex(nextIndex);
+    }, 120);
+
+    return () => window.clearInterval(interval);
   }, [route]);
+
+  useEffect(() => {
+    if (!dimensionTransition) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const nextStep = dimensionTransition.nextStep;
+      setDimensionTransition(null);
+      navigate(`/assessment/${nextStep}`);
+    }, DIMENSION_TRANSITION_DURATION_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [dimensionTransition]);
 
   useEffect(() => {
     if (route.name !== "assessment") {
@@ -958,11 +1163,107 @@ export function AssessmentShell() {
       orgs.length
     : 0;
   const isSuperAdmin = adminAuth?.accessScope === "super-admin";
-  const isDirectorOnboardingFlow = formData.role === "director" && !invitePrefill;
   const isInviteEntryFlow = inviteEntryLocked || inviteLoading || Boolean(invitePrefill);
-  const availableRoleOptions = invitePrefill
-    ? ROLE_OPTIONS.filter((roleOption) => roleOption.value !== "director")
-    : ROLE_OPTIONS;
+  const isLandingSurface =
+    isLandingRoute ||
+    (route.name === "start" && respondentEntryView === "split" && !isInviteEntryFlow);
+  const activeDimensionLabel = question?.dimension || "";
+
+  const getQuestionScore = (questionId: number, value: string | string[] | undefined): number => {
+    const matchingQuestion = activeQuestions.find((item) => item.id === questionId);
+
+    if (!matchingQuestion || value === undefined) {
+      return 0;
+    }
+
+    if (matchingQuestion.multiSelect) {
+      if (!Array.isArray(value) || value.length === 0) {
+        return 0;
+      }
+
+      if (value.includes("none-of-the-above")) {
+        return 0;
+      }
+
+      if (value.length <= 2) {
+        return 1;
+      }
+
+      if (value.length <= 4) {
+        return 2;
+      }
+
+      return 4;
+    }
+
+    if (typeof value !== "string") {
+      return 0;
+    }
+
+    return matchingQuestion.options.find((option) => option.value === value)?.score || 0;
+  };
+
+  const buildDimensionObservation = (dimensionQuestions: typeof activeQuestions): string => {
+    const currentScore = dimensionQuestions.reduce(
+      (total, item) => total + getQuestionScore(item.id, answers[item.id]),
+      0
+    );
+    const maxScore = dimensionQuestions.length * 4;
+    const completionRatio = maxScore ? currentScore / maxScore : 0;
+
+    if (completionRatio <= 0.35) {
+      return "your responses indicate foundational capability gaps that should be addressed before AI use is scaled further.";
+    }
+
+    if (completionRatio <= 0.6) {
+      return "your organisation shows early momentum, but capability is still inconsistent across the dimension you just completed.";
+    }
+
+    if (completionRatio <= 0.8) {
+      return "your organisation is demonstrating meaningful progress, with clear opportunities to improve repeatability and leadership confidence.";
+    }
+
+    return "your organisation is already showing strong capability signals, with the next opportunity being sharper strategic and operational advantage.";
+  };
+
+  const openQuestionStep = (step: number) => {
+    const previousQuestion = activeQuestions[step - 2];
+    const nextQuestion = activeQuestions[step - 1];
+
+    if (
+      previousQuestion &&
+      nextQuestion &&
+      previousQuestion.dimension !== nextQuestion.dimension
+    ) {
+      const completedDimensionQuestions = activeQuestions.filter(
+        (item) => item.dimension === previousQuestion.dimension
+      );
+
+      setDimensionTransition({
+        completedDimension: previousQuestion.dimension,
+        nextDimension: nextQuestion.dimension,
+        observation: buildDimensionObservation(completedDimensionQuestions),
+        nextStep: step
+      });
+      return;
+    }
+
+    navigate(`/assessment/${step}`);
+  };
+
+  const openAssessmentEntry = () => {
+    setEntryError("");
+    setEntryNotice("");
+    setRespondentEntryView("split");
+    navigate("/start");
+  };
+
+  const openRespondentWelcome = () => {
+    setEntryError("");
+    setEntryNotice("");
+    setRespondentEntryView("welcome");
+    navigate("/start");
+  };
 
   function navigate(path: string, replace = false) {
     if (typeof window === "undefined") {
@@ -971,9 +1272,11 @@ export function AssessmentShell() {
 
     setMenuOpen(false);
 
+    const currentLocation = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
     if (replace) {
       window.history.replaceState({}, "", path);
-    } else if (window.location.pathname !== path) {
+    } else if (currentLocation !== path) {
       window.history.pushState({}, "", path);
     }
 
@@ -1006,15 +1309,34 @@ export function AssessmentShell() {
   };
 
   const handleStartModalCancel = () => {
+    setRespondentEntryView("split");
+    setEntryError("");
+    setEntryNotice("");
+    setSubmissionError("");
+    setDimensionTransition(null);
+
     if (isInviteEntryFlow) {
       setInviteEntryLocked(false);
       setInvitePrefill(null);
       setInviteLoading(false);
-      setEntryError("");
-      setEntryNotice("");
     }
 
     navigate("/");
+  };
+
+  const updateDirectorField = <K extends keyof DirectorEntryDraft>(
+    key: K,
+    value: DirectorEntryDraft[K]
+  ) => {
+    if (key === "email") {
+      setEntryNotice("");
+    }
+
+    if (entryError) {
+      setEntryError("");
+    }
+
+    setDirectorForm((current) => ({ ...current, [key]: value }));
   };
 
   const updateFormField = <K extends keyof SubmissionDraft>(key: K, value: SubmissionDraft[K]) => {
@@ -1027,7 +1349,10 @@ export function AssessmentShell() {
     setFormData((current) => ({ ...current, [key]: value }));
   };
 
-  const validateEmailInput = async (emailToValidate: string) => {
+  const validateEmailInput = async (
+    emailToValidate: string,
+    onValidated?: (normalizedEmail: string) => void
+  ) => {
     if (!emailToValidate.trim()) {
       return null;
     }
@@ -1042,7 +1367,7 @@ export function AssessmentShell() {
         setEntryError(result.reason || "Please use a valid email address.");
         return null;
       }
-      updateFormField("email", result.normalizedEmail);
+      onValidated?.(result.normalizedEmail);
       setEntryNotice("Email validated successfully.");
       return result;
     } catch (error) {
@@ -1055,11 +1380,11 @@ export function AssessmentShell() {
 
   const handleDirectorOnboarding = async (normalizedEmail: string) => {
     const response = await backendApi.assessment.directorOnboard({
-      firmType: formData.firmType as FirmType,
-      orgName: formData.orgName,
+      firmType: directorForm.firmType,
+      orgName: directorForm.orgName,
       directorEmail: normalizedEmail,
-      directorName: formData.name,
-      directorDept: formData.dept,
+      directorName: directorForm.name,
+      directorDept: directorForm.dept,
       consentAccepted: true
     });
 
@@ -1080,9 +1405,50 @@ export function AssessmentShell() {
       );
     }
 
-    setFormData(EMPTY_ENTRY_DRAFT);
+    setDirectorForm(EMPTY_DIRECTOR_ENTRY_DRAFT);
     setAnswers({});
     setAnswerOwnerSignature("");
+  };
+
+  const handleDirectorSetupSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setEntryError("");
+    setEntryNotice("");
+
+    if (!directorForm.name.trim()) {
+      setEntryError("Full name is required.");
+      return;
+    }
+    if (!directorForm.orgName.trim()) {
+      setEntryError("Organisation name is required.");
+      return;
+    }
+    if (!directorForm.dept.trim()) {
+      setEntryError("Department is required.");
+      return;
+    }
+    if (!directorForm.consentAccepted) {
+      setEntryError("You must accept the consent statement before continuing.");
+      return;
+    }
+
+    const validation = await validateEmailInput(directorForm.email, (normalizedEmail) => {
+      updateDirectorField("email", normalizedEmail);
+    });
+    if (!validation?.normalizedEmail) {
+      return;
+    }
+
+    setEntryLoading(true);
+    try {
+      await handleDirectorOnboarding(validation.normalizedEmail);
+    } catch (error) {
+      setEntryError(
+        getErrorMessage(error, "Unable to submit the director onboarding form.")
+      );
+    } finally {
+      setEntryLoading(false);
+    }
   };
 
   const handleStartAssessment = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1090,51 +1456,39 @@ export function AssessmentShell() {
     setEntryError("");
     setEntryNotice("");
 
-    if (!formData.name.trim()) {
-      setEntryError("Full name is required.");
-      return;
-    }
-    if (!formData.firmType) {
-      setEntryError("Select the type of firm before continuing.");
-      return;
-    }
     if (!formData.orgName.trim()) {
       setEntryError("Organisation name is required.");
       return;
     }
+
     if (!formData.role) {
-      setEntryError("Select a role level before continuing.");
-      return;
-    }
-    if (!formData.dept.trim()) {
-      setEntryError("Department is required.");
-      return;
-    }
-    if (!formData.consentAccepted) {
-      setEntryError("You must accept the consent statement before continuing.");
+      setEntryError("Select your role before continuing.");
       return;
     }
 
-    const validation = await validateEmailInput(formData.email);
-    if (!validation?.normalizedEmail) {
-      return;
-    }
+    setEntryLoading(true);
 
-    if (isDirectorOnboardingFlow) {
-      setEntryLoading(true);
-      try {
-        await handleDirectorOnboarding(validation.normalizedEmail);
-      } catch (error) {
-        setEntryError(
-          getErrorMessage(error, "Unable to submit the director onboarding form.")
-        );
-      } finally {
-        setEntryLoading(false);
-      }
-      return;
-    }
+    try {
+      const resolvedOrganisation = invitePrefill
+        ? {
+            organisationId: invitePrefill.organisationId,
+            organisationKey: invitePrefill.organisationKey,
+            firmType: invitePrefill.firmType,
+            orgName: invitePrefill.orgName
+          }
+        : await backendApi.assessment.resolveOrganisation(formData.orgName);
 
-    const nextDraft: SubmissionDraft = { ...formData, email: validation.normalizedEmail };
+      const nextDraft: SubmissionDraft = {
+        ...formData,
+        firmType: resolvedOrganisation.firmType,
+        orgName: resolvedOrganisation.orgName,
+        email: "",
+        name: "",
+        dept: "",
+        phone: "",
+        attribution: "",
+        consentAccepted: false
+      };
     const nextOwnerSignature = buildAnswerOwnerSignature(nextDraft);
     const shouldResetAnswers =
       Boolean(answerOwnerSignature) &&
@@ -1145,8 +1499,23 @@ export function AssessmentShell() {
       setAnswers({});
     }
 
-    setAnswerOwnerSignature(nextOwnerSignature);
-    navigate(`/assessment/${shouldResetAnswers ? 1 : getNextIncompleteStep(activeQuestions, answers)}`);
+      setFormData(nextDraft);
+      setAnswerOwnerSignature(nextOwnerSignature);
+      navigate(
+        `/assessment/${
+          shouldResetAnswers ? 1 : getNextIncompleteStep(getQuestionsForFirmType(nextDraft.firmType), answers)
+        }`
+      );
+    } catch (error) {
+      setEntryError(
+        getErrorMessage(
+          error,
+          "We couldn't find that organisation yet. Ask your director to set up your team first."
+        )
+      );
+    } finally {
+      setEntryLoading(false);
+    }
   };
 
   const handleSelect = (value: string) => {
@@ -1155,6 +1524,12 @@ export function AssessmentShell() {
     }
 
     setSubmissionError("");
+    if (autoAdvanceTimeoutRef.current !== null) {
+      window.clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
+    setAutoAdvanceQuestionId(question.multiSelect ? null : question.id);
+
     setAnswers((currentAnswers) => {
       const existing = currentAnswers[question.id];
 
@@ -1178,10 +1553,6 @@ export function AssessmentShell() {
 
       return { ...currentAnswers, [question.id]: value };
     });
-
-    if (!question.multiSelect && currentStep < totalSteps) {
-      window.setTimeout(() => navigate(`/assessment/${currentStep + 1}`), 220);
-    }
   };
 
   const clearAssessmentStorage = () => {
@@ -1192,11 +1563,13 @@ export function AssessmentShell() {
     setAnswers({});
     setAnswerOwnerSignature("");
     setInvitePrefill(null);
+    setInviteEntryLocked(false);
+    setRespondentEntryView("split");
   };
 
   const handleFinish = async () => {
-    if (!isCompleteDraft(formData)) {
-      navigate("/start");
+    if (!isAssessmentContextReady(formData)) {
+      openAssessmentEntry();
       return;
     }
 
@@ -1207,41 +1580,146 @@ export function AssessmentShell() {
       return;
     }
 
+    setSubmissionError("");
+    navigate("/assessment/details");
+  };
+
+  useEffect(() => {
+    if (
+      route.name !== "assessment" ||
+      !question ||
+      question.multiSelect ||
+      autoAdvanceQuestionId !== question.id ||
+      !hasAnswerValue(currentAnswer)
+    ) {
+      return;
+    }
+
+    if (autoAdvanceTimeoutRef.current !== null) {
+      window.clearTimeout(autoAdvanceTimeoutRef.current);
+    }
+
+    autoAdvanceTimeoutRef.current = window.setTimeout(() => {
+      setAutoAdvanceQuestionId(null);
+
+      if (currentStep < totalSteps) {
+        openQuestionStep(currentStep + 1);
+        return;
+      }
+
+      void handleFinish();
+    }, 180);
+
+    return () => {
+      if (autoAdvanceTimeoutRef.current !== null) {
+        window.clearTimeout(autoAdvanceTimeoutRef.current);
+        autoAdvanceTimeoutRef.current = null;
+      }
+    };
+  }, [
+    autoAdvanceQuestionId,
+    currentAnswer,
+    currentStep,
+    handleFinish,
+    openQuestionStep,
+    question,
+    route.name,
+    totalSteps
+  ]);
+
+  const handleGenerateReport = async () => {
+    if (!isAssessmentContextReady(formData)) {
+      openAssessmentEntry();
+      return;
+    }
+
+    const missingQuestion = activeQuestions.find((item) => !hasAnswerValue(answers[item.id]));
+    if (missingQuestion) {
+      setSubmissionError("Please answer every question before generating the report.");
+      navigate(`/assessment/${missingQuestion.id}`);
+      return;
+    }
+
+    if (!formData.name.trim()) {
+      setSubmissionError("Full name is required.");
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      setSubmissionError("Work email address is required.");
+      return;
+    }
+
+    const emailValidation = await backendApi.assessment.validateEmail(formData.email);
+    if (!emailValidation.valid || !emailValidation.normalizedEmail) {
+      setSubmissionError(emailValidation.reason || "Please use a valid work email address.");
+      return;
+    }
+
+    if (emailValidation.normalizedEmail !== formData.email) {
+      setFormData((current) => ({ ...current, email: emailValidation.normalizedEmail! }));
+    }
+
+    if (!formData.consentAccepted) {
+      setSubmissionError("Please confirm the privacy statement before continuing.");
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmissionError("");
+    navigate("/assessment/processing");
 
     try {
-      const response = await backendApi.assessment.submit({
+      const completionPromise = backendApi.assessment.submit({
         firmType: formData.firmType,
         orgName: formData.orgName,
-        respondentEmail: formData.email,
+        respondentEmail: emailValidation.normalizedEmail,
         respondentName: formData.name,
         respondentRole: formData.role,
-        respondentDept: formData.dept,
+        respondentDept: formData.dept || null,
+        respondentPhone: formData.phone || null,
+        attributionSource: formData.attribution || null,
         consentAccepted: true,
         answers: activeQuestions.map((item) => ({
           questionId: item.id,
           value: answers[item.id]
         }))
       });
+      const minimumProcessingDelay = new Promise<void>((resolve) => {
+        window.setTimeout(resolve, PROCESSING_SCREEN_MIN_DURATION_MS);
+      });
+      const [response] = (await Promise.all([
+        completionPromise,
+        minimumProcessingDelay
+      ])) as [AssessmentCompleteResponse, void];
 
       setLastSubmission({
         organisationId: response.organisationId,
         organisationKey: response.organisationKey,
         firmType: response.firmType,
         orgName: formData.orgName,
-        totalScore: response.respondentScore.totalScore,
-        readinessLevel: response.respondentScore.readinessLevel,
-        submissionCount: response.organisationStatus.submissionCount
+        latestTotalScore: response.organisationStatus.aggregatedScores.total,
+        latestReadinessLevel: getReadinessLabel(
+          response.organisationStatus.aggregatedScores.total
+        ),
+        respondentTotalScore: response.respondentScore.totalScore,
+        respondentReadinessLevel: response.respondentScore.readinessLevel,
+        submissionCount: response.organisationStatus.submissionCount,
+        recipientEmail: response.reportDelivery.recipientEmail,
+        reportViewUrl: response.reportDelivery.viewUrl,
+        generatedAt: response.reportDelivery.generatedAt,
+        deliveryMode: response.reportDelivery.deliveryMode
       });
 
       removeStorage(PUBLIC_DASHBOARD_STORAGE_KEY);
       setPublicDashboard(null);
       setPublicDashboardFetchedAt(null);
       clearAssessmentStorage();
-      navigate("/complete");
+      navigate("/assessment/result");
     } catch (error) {
+      navigate("/assessment/details", true);
       setSubmissionError(getErrorMessage(error, "Failed to submit. Please try again."));
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -1614,7 +2092,9 @@ export function AssessmentShell() {
     setAdminNotice("");
   };
 
-  const isPrimaryRouteActive = (key: "home" | "dashboard" | "start") => {
+  const isPrimaryRouteActive = (
+    key: "home" | "dashboard" | "assessment" | "director-setup"
+  ) => {
     if (key === "home") {
       return isLandingSurface;
     }
@@ -1623,7 +2103,17 @@ export function AssessmentShell() {
       return route.name === "dashboard";
     }
 
-    return route.name === "start";
+    if (key === "assessment") {
+      return (
+        route.name === "start" ||
+        route.name === "assessment" ||
+        route.name === "assessment-details" ||
+        route.name === "assessment-processing" ||
+        route.name === "assessment-result"
+      );
+    }
+
+    return route.name === "director-setup";
   };
 
   const primaryNavItems = [
@@ -1640,10 +2130,16 @@ export function AssessmentShell() {
       action: () => navigate("/dashboard")
     },
     {
-      key: "start" as const,
-      label: "Start Assessment",
-      description: "Open the respondent entry flow",
-      action: () => navigate("/start")
+      key: "assessment" as const,
+      label: "Take the Assessment",
+      description: "Open the respondent assessment flow",
+      action: openAssessmentEntry
+    },
+    {
+      key: "director-setup" as const,
+      label: "Director Setup",
+      description: "Create the firm and invite your team",
+      action: () => navigate("/director-setup")
     }
   ].filter((item) => !isPrimaryRouteActive(item.key));
 
@@ -1667,7 +2163,7 @@ export function AssessmentShell() {
             <button onClick={() => navigate("/dashboard")} className="uppercase">
               Dashboard
             </button>
-            <button onClick={() => navigate("/start")} className={sharedButtonClasses}>
+            <button onClick={openAssessmentEntry} className={sharedButtonClasses}>
               Start Assessment
             </button>
           </div>
@@ -1678,18 +2174,24 @@ export function AssessmentShell() {
       );
     }
 
-    if (route.name === "assessment") {
+    if (isRespondentAssessmentRoute) {
       return (
         <>
           <div className="hidden items-center gap-3 text-sm font-medium tracking-wide text-stone-600 md:flex">
             <span className="rounded-full border border-blue-100 bg-white px-4 py-2 text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-500">
-              Question {route.step} of {totalSteps}
+              {route.name === "assessment"
+                ? `Question ${route.step} of ${totalSteps}`
+                : route.name === "assessment-details"
+                  ? "Final details"
+                  : route.name === "assessment-processing"
+                    ? "Generating report"
+                    : "Report ready"}
             </span>
             <button
-              onClick={() => navigate("/start")}
+              onClick={openRespondentWelcome}
               className="rounded-full border border-stone-200 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-stone-600"
             >
-              Entry
+              Respondent Entry
             </button>
             <button onClick={() => navigate("/")} className={sharedButtonClasses}>
               Exit Assessment
@@ -1711,7 +2213,7 @@ export function AssessmentShell() {
               onClick={item.action}
               className="uppercase"
             >
-              {item.key === "start" ? "Start" : item.label}
+              {item.label}
             </button>
           ))}
         </div>
@@ -1788,7 +2290,7 @@ export function AssessmentShell() {
               </p>
               <div className="mt-8 flex w-full flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
                 <motion.button
-                  onClick={() => navigate("/start")}
+                  onClick={openAssessmentEntry}
                   animate={{
                     x: [0, -5, 5, -4, 4, -2, 2, 0],
                     rotate: [0, -1, 1, -0.8, 0.8, 0],
@@ -2599,485 +3101,176 @@ export function AssessmentShell() {
     );
   };
 
-  const renderStart = () => (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/45 px-2 py-2 backdrop-blur-[6px] sm:px-4 sm:py-4"
-      style={{
-        paddingTop: "max(0.5rem, env(safe-area-inset-top))",
-        paddingBottom: "max(0.75rem, calc(env(safe-area-inset-bottom) + 0.5rem))"
+  const renderDirectorSetup = () => (
+    <DirectorSetupScreen
+      directorForm={directorForm}
+      firmTypeOptions={FIRM_TYPE_OPTIONS}
+      entryLoading={entryLoading}
+      entryError={entryError}
+      entryNotice={entryNotice}
+      onDismissEntryError={() => setEntryError("")}
+      onDismissEntryNotice={() => setEntryNotice("")}
+      onFirmTypeChange={(value) => updateDirectorField("firmType", value)}
+      onOrgNameChange={(value) => updateDirectorField("orgName", value)}
+      onEmailChange={(value) => updateDirectorField("email", value)}
+      onNameChange={(value) => updateDirectorField("name", value)}
+      onDeptChange={(value) => updateDirectorField("dept", value)}
+      onConsentChange={(value) => updateDirectorField("consentAccepted", value)}
+      onBack={openAssessmentEntry}
+      onClose={handleStartModalCancel}
+      onSubmit={(event) => {
+        void handleDirectorSetupSubmit(event);
       }}
-      onClick={(event) => {
-        if (!isInviteEntryFlow && event.target === event.currentTarget) {
-          navigate("/");
-        }
-      }}
-    >
-      <div className="mx-auto flex min-h-full w-full max-w-[44rem] items-start justify-center sm:items-center">
-        <motion.div
-          initial={{ opacity: 0, y: 28 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full py-1 sm:py-0"
-        >
-          <div
-            className="relative flex w-full flex-col overflow-hidden rounded-[22px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(248,250,252,0.97)_100%)] shadow-[0_45px_140px_rgba(15,23,42,0.28),0_16px_48px_rgba(15,23,42,0.14)] sm:rounded-[34px]"
-            style={{
-              maxHeight:
-                "min(52rem, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem))"
-            }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
-            {!isInviteEntryFlow ? (
-              <button
-                type="button"
-                onClick={() => navigate("/")}
-                className="absolute right-2.5 top-2.5 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/92 text-slate-500 shadow-[0_12px_32px_rgba(15,23,42,0.12)] transition-colors hover:text-slate-900 sm:right-4 sm:top-4 sm:h-11 sm:w-11"
-                aria-label="Close assessment entry modal"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            ) : null}
-
-            <form
-              className="flex min-h-0 flex-1 flex-col"
-              onSubmit={(event) => { void handleStartAssessment(event); }}
-            >
-              <div className="min-h-0 flex-1 overflow-y-auto px-3.5 pb-3 pt-14 overscroll-contain sm:px-8 sm:pb-5 sm:pt-8">
-                <div className="space-y-3 sm:space-y-4">
-                  <div className="grid gap-3 md:grid-cols-2 sm:gap-4">
-                    <div className="space-y-2">
-                      <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-400 sm:text-[12px]">
-                        Type of Firm
-                      </label>
-                      <select
-                        className={`w-full rounded-[18px] border px-4 py-3.5 text-[15px] font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition sm:rounded-[22px] sm:px-5 sm:py-4 ${
-                          invitePrefill
-                            ? "cursor-not-allowed border-stone-200/70 bg-stone-100 text-slate-500"
-                            : "border-stone-200/90 bg-white text-slate-900 focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
-                        }`}
-                        value={formData.firmType}
-                        onChange={(event) => updateFormField("firmType", event.target.value as FirmType | "")}
-                        disabled={Boolean(invitePrefill)}
-                      >
-                        <option value="">Select firm type</option>
-                        {FIRM_TYPE_OPTIONS.map((firmOption) => (
-                          <option key={firmOption.value} value={firmOption.value}>
-                            {firmOption.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-400 sm:text-[12px]">
-                        Email Address
-                      </label>
-                      <input
-                        type="email"
-                        placeholder="you@example.com"
-                        className="w-full rounded-[18px] border border-stone-200/90 bg-white px-4 py-3.5 text-[15px] font-medium text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:rounded-[22px] sm:px-5 sm:py-4"
-                        value={formData.email}
-                        onChange={(event) => updateFormField("email", event.target.value)}
-                        onBlur={() => { void validateEmailInput(formData.email); }}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-400 sm:text-[12px]">
-                        Full Name
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Jane Doe"
-                        className="w-full rounded-[18px] border border-stone-200/90 bg-white px-4 py-3.5 text-[15px] font-medium text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:rounded-[22px] sm:px-5 sm:py-4"
-                        value={formData.name}
-                        onChange={(event) => updateFormField("name", event.target.value)}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-400 sm:text-[12px]">
-                        Organisation Name
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="GTBank"
-                        className={`w-full rounded-[18px] border px-4 py-3.5 text-[15px] font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition sm:rounded-[22px] sm:px-5 sm:py-4 ${
-                          invitePrefill
-                            ? "cursor-not-allowed border-stone-200/70 bg-stone-100 text-slate-500"
-                            : "border-stone-200/90 bg-white text-slate-900 focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
-                        }`}
-                        value={formData.orgName}
-                        onChange={(event) => updateFormField("orgName", event.target.value)}
-                        disabled={Boolean(invitePrefill)}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-400 sm:text-[12px]">
-                        Role Level
-                      </label>
-                      <select
-                        className="w-full rounded-[18px] border border-stone-200/90 bg-white px-4 py-3.5 text-[15px] font-medium text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:rounded-[22px] sm:px-5 sm:py-4"
-                        value={formData.role}
-                        onChange={(event) => updateFormField("role", event.target.value as RoleLevel | "")}
-                      >
-                        <option value="">Select role</option>
-                        {availableRoleOptions.map((roleOption) => (
-                          <option key={roleOption.value} value={roleOption.value}>
-                            {roleOption.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-400 sm:text-[12px]">
-                        Department
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Finance"
-                        className="w-full rounded-[18px] border border-stone-200/90 bg-white px-4 py-3.5 text-[15px] font-medium text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] outline-none transition focus:border-blue-300 focus:ring-4 focus:ring-blue-100 sm:rounded-[22px] sm:px-5 sm:py-4"
-                        value={formData.dept}
-                        onChange={(event) => updateFormField("dept", event.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <label className="flex items-start gap-3 rounded-[18px] border border-stone-200/80 bg-stone-50/85 px-4 py-3.5 text-[14px] leading-6 text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] sm:gap-4 sm:rounded-[22px] sm:px-5 sm:py-4 sm:text-[15px]">
-                    <input
-                      type="checkbox"
-                      className="mt-1 h-4 w-4 rounded border-stone-300 text-blue-700 focus:ring-blue-200"
-                      checked={formData.consentAccepted}
-                      onChange={(event) => updateFormField("consentAccepted", event.target.checked)}
-                    />
-                    <span>
-                      I consent to Elite Global AI processing my assessment data and
-                      understand that only anonymised organisation-level results will be
-                      visible in the final report.
-                    </span>
-                  </label>
-
-                  {entryNotice ? (
-                    <InlineBanner tone="success" message={entryNotice} onClose={() => setEntryNotice("")} />
-                  ) : null}
-
-                  {entryError ? (
-                    <InlineBanner tone="error" message={entryError} onClose={() => setEntryError("")} />
-                  ) : null}
-
-                  {inviteLoading ? (
-                    <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading firm invitation...
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="border-t border-white/65 bg-white/78 px-3.5 py-3 backdrop-blur-xl sm:px-8 sm:py-4">
-                <div className="flex flex-col gap-2.5 sm:flex-row sm:gap-3">
-                  <button
-                    type="submit"
-                    disabled={entryLoading || inviteLoading}
-                    className="inline-flex flex-1 items-center justify-center gap-3 rounded-full bg-blue-900 px-5 py-3 text-[15px] font-bold text-white shadow-[0_16px_38px_rgba(30,64,175,0.28)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70 sm:px-6 sm:py-3.5 sm:text-[16px]"
-                  >
-                    {entryLoading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        {isDirectorOnboardingFlow ? "Submit" : "Continue to Questions"}
-                      </>
-                    ) : (
-                      <>
-                        {isDirectorOnboardingFlow ? "Submit" : "Continue to Questions"}
-                      </>
-                    )}
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleStartModalCancel}
-                    className="inline-flex items-center justify-center rounded-full border border-stone-200 bg-white px-5 py-3 text-[15px] font-semibold text-stone-700 shadow-[0_10px_28px_rgba(15,23,42,0.06)] transition-colors hover:border-stone-300 hover:text-stone-950 sm:py-3.5 sm:text-[16px]"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </motion.div>
-      </div>
-    </motion.div>
+    />
   );
+
+  const renderStart = () => {
+    if (respondentEntryView === "welcome" || isInviteEntryFlow) {
+      return (
+        <AssessmentWelcomeScreen
+          formData={{
+            orgName: formData.orgName,
+            role: formData.role,
+            dept: formData.dept,
+            firmType: formData.firmType
+          }}
+          invitePrefill={invitePrefill}
+          firmTypeOptions={FIRM_TYPE_OPTIONS}
+          roleOptions={availableRoleOptions}
+          entryLoading={entryLoading}
+          inviteLoading={inviteLoading}
+          entryError={entryError}
+          entryNotice={entryNotice}
+          onDismissEntryError={() => setEntryError("")}
+          onDismissEntryNotice={() => setEntryNotice("")}
+          onFirmTypeChange={(value) => updateFormField("firmType", value)}
+          onOrgNameChange={(value) => updateFormField("orgName", value)}
+          onRoleChange={(value) => updateFormField("role", value)}
+          onDeptChange={(value) => updateFormField("dept", value)}
+          onBack={isInviteEntryFlow ? () => navigate("/") : () => setRespondentEntryView("split")}
+          onClose={handleStartModalCancel}
+          onSubmit={(event) => {
+            void handleStartAssessment(event);
+          }}
+        />
+      );
+    }
+
+    return (
+      <AssessmentSplitEntryScreen
+        onSelectRespondent={openRespondentWelcome}
+        onSelectDirector={() => {
+          setEntryError("");
+          setEntryNotice("");
+          navigate("/director-setup");
+        }}
+        onClose={handleStartModalCancel}
+      />
+    );
+  };
 
   const renderAssessment = () => {
     if (!question || !isCompleteDraft(formData)) {
       return null;
     }
 
-    const overallProgress = Math.max(4, Math.round((currentStep / totalSteps) * 100));
-    const sectionProgress = currentDimensionQuestions.length
-      ? Math.round(((currentDimensionIndex + 1) / currentDimensionQuestions.length) * 100)
-      : 0;
-    const roleLabel =
-      ROLE_OPTIONS.find((option) => option.value === formData.role)?.label || formData.role;
-    const selectionInstruction = question.multiSelect
-      ? "Select every option that reflects the current reality of your team. Use “None of the above” only when no listed capability applies."
-      : "Choose the single option that best describes how your team operates today, not the future target state.";
+    if (dimensionTransition) {
+      return (
+        <AssessmentDimensionTransitionScreen
+          completedDimension={dimensionTransition.completedDimension}
+          nextDimension={dimensionTransition.nextDimension}
+          observation={dimensionTransition.observation}
+          onClose={handleStartModalCancel}
+        />
+      );
+    }
 
     return (
-      <div className="relative min-h-screen overflow-hidden bg-[#F4F7FC] pt-20 pb-8 sm:pb-4">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(219,234,254,0.55),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(191,219,254,0.35),transparent_34%)]" />
+      <AssessmentQuestionScreen
+        question={question}
+        currentAnswer={currentAnswer}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        answeredCount={answeredCount}
+        currentDimensionIndex={currentDimensionIndex}
+        currentDimensionQuestionsCount={currentDimensionQuestions.length}
+        activeFirmTypeLabel={activeFirmTypeLabel}
+        orgName={formData.orgName}
+        roleLabel={getRoleLabel(formData.role)}
+        dept={formData.dept}
+        submissionError={submissionError}
+        onDismissSubmissionError={() => setSubmissionError("")}
+        onSelect={handleSelect}
+        onBack={() => {
+          if (currentStep === 1) {
+            openRespondentWelcome();
+            return;
+          }
 
-        <div
-          ref={assessmentViewportRef}
-          className={`relative mx-auto max-w-[min(98vw,1500px)] px-2 pb-4 sm:px-4 lg:px-6 ${isMobileViewport ? "overflow-visible" : "overflow-hidden"}`}
-        >
-          <div style={{ height: assessmentScaledHeight ? `${assessmentScaledHeight}px` : undefined }}>
-            <div
-              ref={assessmentContentRef}
-              className="origin-top-left"
-              style={{
-                transform: `scale(${assessmentScale})`,
-                transformOrigin: "top left",
-                width: assessmentScale < 1 ? `${100 / assessmentScale}%` : "100%"
-              }}
-            >
-              <section className="mb-4 rounded-[20px] border border-blue-100 bg-white/95 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)] sm:rounded-[24px]">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap gap-2">
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-emerald-700">
-                        {activeFirmTypeLabel}
-                      </span>
-                      <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-blue-700">
-                        {formData.orgName}
-                      </span>
-                      <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500">
-                        {roleLabel}
-                      </span>
-                      <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500">
-                        {formData.dept}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <span className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
-                        Question {currentStep} of {totalSteps}
-                      </span>
-                      <span className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
-                        {answeredCount} answered
-                      </span>
-                      <span className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
-                        Section {currentDimensionIndex + 1}/{currentDimensionQuestions.length}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="w-full max-w-sm lg:min-w-[280px]">
-                    <div className="mb-2 flex items-center justify-between text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
-                      <span>Overall Progress</span>
-                      <span>{overallProgress}%</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-white shadow-inner ring-1 ring-stone-100">
-                      <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${overallProgress}%` }} />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                      <span>{question.dimension}</span>
-                      <span>{sectionProgress}% section</span>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <AnimatePresence mode="wait">
-                <motion.section
-                  key={currentStep}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -12 }}
-                  transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                  className="flex flex-col rounded-[22px] border border-blue-100 bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] sm:rounded-[28px] sm:p-6"
-                >
-                  <div className="mb-5 space-y-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-blue-700">
-                        {question.dimension}
-                      </span>
-                      <span className={`rounded-full border px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] ${question.multiSelect ? "border-amber-200 bg-amber-50 text-amber-700" : "border-stone-200 bg-stone-50 text-slate-500"}`}>
-                        {question.multiSelect ? "Multi-select" : "Single response"}
-                      </span>
-                    </div>
-
-                    <h1 className="w-full font-serif text-[1.1rem] font-medium leading-[1.3] tracking-[0.01em] text-slate-950 sm:text-[1.42rem] lg:text-[1.68rem]">
-                      {question.text}
-                    </h1>
-
-                    <p className="w-full text-sm leading-6 text-slate-600">{selectionInstruction}</p>
-                  </div>
-
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    {question.options.map((option, index) => {
-                      const selected = question.multiSelect
-                        ? Array.isArray(currentAnswer) && currentAnswer.includes(option.value)
-                        : currentAnswer === option.value;
-                      const optionMarker = question.multiSelect
-                        ? String(index + 1).padStart(2, "0")
-                        : option.value;
-
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => handleSelect(option.value)}
-                          className={`group h-full w-full rounded-[18px] border px-4 py-3 text-left transition-all sm:rounded-[22px] ${selected ? "border-blue-500 bg-blue-50 shadow-[0_10px_24px_rgba(37,99,235,0.12)]" : "border-stone-200 bg-white hover:border-blue-200 hover:bg-blue-50/35"}`}
-                        >
-                          <div className="flex h-full items-start gap-3">
-                            <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-xs font-extrabold ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-slate-50 text-slate-500"}`}>
-                              {optionMarker}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex h-full flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                <p className="text-[15px] font-semibold leading-6 text-slate-900 sm:text-base">
-                                  {option.label}
-                                </p>
-                                  <div className={`inline-flex h-8 min-w-[78px] items-center justify-center rounded-full border px-3 text-[10px] font-extrabold uppercase tracking-[0.14em] sm:min-w-[88px] ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-white text-slate-400"}`}>
-                                    {selected ? (
-                                      <span className="inline-flex items-center gap-1.5">
-                                        <CheckCircle2 className="h-3.5 w-3.5" />
-                                        Selected
-                                      </span>
-                                  ) : question.multiSelect ? "Add" : "Select"}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {submissionError ? (
-                    <div className="mt-4">
-                      <InlineBanner tone="error" message={submissionError} onClose={() => setSubmissionError("")} className="rounded-2xl text-sm" />
-                    </div>
-                  ) : null}
-
-                  <div className="mt-5 flex flex-col gap-3 border-t border-stone-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
-                    <button
-                      type="button"
-                      onClick={() => currentStep === 1 ? navigate("/start") : navigate(`/assessment/${currentStep - 1}`)}
-                      className="inline-flex items-center justify-center gap-2 rounded-full border border-stone-200 px-5 py-3 text-sm font-semibold text-stone-700"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Back
-                    </button>
-
-                    <div className="flex flex-col gap-3 sm:flex-row">
-                      {currentStep < totalSteps ? (
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/assessment/${currentStep + 1}`)}
-                          disabled={!currentQuestionAnswered}
-                          className="inline-flex items-center justify-center gap-2 rounded-full bg-blue-900 px-6 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          Next Question
-                          <ChevronRight className="h-4 w-4" />
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => { void handleFinish(); }}
-                          disabled={!currentQuestionAnswered || isSubmitting}
-                          className="inline-flex items-center justify-center gap-2 rounded-full bg-blue-900 px-6 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"
-                        >
-                          {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                          Finish Assessment
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </motion.section>
-              </AnimatePresence>
-            </div>
-          </div>
-        </div>
-      </div>
+          navigate(`/assessment/${currentStep - 1}`);
+        }}
+        onNext={() => openQuestionStep(currentStep + 1)}
+        onFinish={() => {
+          void handleFinish();
+        }}
+        currentQuestionAnswered={currentQuestionAnswered}
+        isSubmitting={isSubmitting}
+        onClose={handleStartModalCancel}
+      />
     );
   };
 
-  const renderComplete = () => (
-    <div className="relative min-h-screen overflow-hidden bg-[#F9F8F4] pt-28 pb-16">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.85),rgba(249,248,244,0.9))]" />
-      <div className="relative mx-auto max-w-4xl px-5 py-12 sm:px-8">
-        <div className="rounded-[36px] border border-stone-200 bg-white p-8 text-center shadow-xl sm:p-12">
-          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-            <CheckCircle2 className="h-10 w-10" />
-          </div>
-          <p className="mb-3 text-[11px] font-extrabold uppercase tracking-[0.24em] text-stone-400">
-            Assessment Complete
-          </p>
-          <h1 className="mb-4 text-[2.2rem] text-stone-900 sm:text-5xl">
-            Response recorded successfully
-          </h1>
-          <p className="mx-auto mb-8 max-w-2xl text-base leading-relaxed text-stone-600 sm:text-lg">
-            Your submission has been saved to the backend and added to your organisation’s
-            aggregated readiness record. Elite Global AI can now review the responses and
-            send the final PDF report from the admin dashboard.
-          </p>
-          <p className="mx-auto mb-8 max-w-2xl text-sm font-medium leading-relaxed text-stone-500 sm:text-base">
-            You will be redirected to the Elite Global AI website in a few seconds.
-          </p>
+  const renderAssessmentDetails = () => {
+    if (!isAssessmentContextReady(formData)) {
+      return null;
+    }
 
-          {lastSubmission ? (
-            <div className="mx-auto mb-8 grid max-w-3xl gap-4 sm:grid-cols-3">
-              <div className="rounded-[24px] border border-stone-200 bg-stone-50 p-5">
-                <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.22em] text-stone-400">
-                  Organisation
-                </p>
-                <p className="text-lg font-semibold text-stone-900">{lastSubmission.orgName}</p>
-                <p className="text-sm text-stone-500">{getFirmTypeLabel(lastSubmission.firmType)}</p>
-              </div>
-              <div className="rounded-[24px] border border-stone-200 bg-stone-50 p-5">
-                <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.22em] text-stone-400">
-                  Score
-                </p>
-                <p className="text-lg font-semibold text-stone-900">{lastSubmission.totalScore}/100</p>
-                <p className="text-sm text-stone-500">{lastSubmission.readinessLevel}</p>
-              </div>
-              <div className="rounded-[24px] border border-stone-200 bg-stone-50 p-5">
-                <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.22em] text-stone-400">
-                  Responses
-                </p>
-                <p className="text-lg font-semibold text-stone-900">{lastSubmission.submissionCount}</p>
-                <p className="text-sm text-stone-500">Now captured for this org</p>
-              </div>
-            </div>
-          ) : null}
+    return (
+      <AssessmentCompletionDetailsScreen
+        orgName={formData.orgName}
+        firmType={formData.firmType}
+        roleLabel={getRoleLabel(formData.role)}
+        dept={formData.dept}
+        answeredCount={answeredCount}
+        totalSteps={totalSteps}
+        name={formData.name}
+        email={formData.email}
+        phone={formData.phone}
+        attribution={formData.attribution}
+        consentAccepted={formData.consentAccepted}
+        attributionOptions={ATTRIBUTION_OPTIONS}
+        submissionError={submissionError}
+        isSubmitting={isSubmitting}
+        onDismissSubmissionError={() => setSubmissionError("")}
+        onNameChange={(value) => updateFormField("name", value)}
+        onEmailChange={(value) => updateFormField("email", value)}
+        onPhoneChange={(value) => updateFormField("phone", value)}
+        onAttributionChange={(value) => updateFormField("attribution", value)}
+        onConsentChange={(value) => updateFormField("consentAccepted", value)}
+        onBack={() => navigate(`/assessment/${totalSteps}`)}
+        onClose={handleStartModalCancel}
+        onSubmit={() => {
+          void handleGenerateReport();
+        }}
+      />
+    );
+  };
 
-          <div className="flex flex-col justify-center gap-3 sm:flex-row">
-            <button
-              onClick={() => window.location.assign(MARKETING_SITE_URL)}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-blue-900 px-6 py-3 text-sm font-bold text-white"
-            >
-              Go to Elite Global AI
-              <ArrowRight className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => navigate("/start")}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-stone-200 px-6 py-3 text-sm font-semibold text-stone-700"
-            >
-              Start Another Response
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+  const renderAssessmentProcessing = () => (
+    <AssessmentProcessingScreen
+      processingProgress={processingProgress}
+      processingDimensionIndex={processingDimensionIndex}
+      dimensionLabels={Object.values(DIMENSION_LABELS)}
+      onClose={handleStartModalCancel}
+    />
+  );
+
+  const renderAssessmentResult = () => (
+    <AssessmentFinalResultScreen
+      lastSubmission={lastSubmission}
+      onStartAnother={openAssessmentEntry}
+      onClose={handleStartModalCancel}
+    />
   );
 
   const renderAdmin = () => {
@@ -3477,7 +3670,7 @@ export function AssessmentShell() {
                         className="inline-flex items-center gap-2 rounded-full border border-stone-200 px-5 py-3 text-[15px] font-semibold text-stone-700 disabled:cursor-not-allowed disabled:opacity-70"
                       >
                         {busyKey === `preview-${organisation.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-                        Preview PDF
+                        View Latest Snapshot
                       </button>
                       <button
                         onClick={() => { void handleSendReport(organisation.id); }}
@@ -3511,6 +3704,7 @@ export function AssessmentShell() {
                         {organisation.directorEmail || "No director email set yet"}
                       </span>
                       <span>Report sent: {formatReportDate(organisation.reportSentAt)}</span>
+                      <span>The live snapshot matches the respondent report view.</span>
                     </div>
                   </div>
                 );
@@ -3535,30 +3729,35 @@ export function AssessmentShell() {
 
   return (
     <div className="min-h-screen bg-[#F9F8F4] text-stone-800 selection:bg-nobel-gold selection:text-white">
-      <nav className={`fixed left-0 right-0 top-0 z-50 transition-all duration-300 ${scrolled ? "bg-[#F9F8F4]/90 py-4 shadow-sm backdrop-blur-md" : "bg-transparent py-6"}`}>
-        <div className="container mx-auto flex items-center justify-between px-4 sm:px-6">
-          <div className="flex cursor-pointer items-center gap-4" onClick={() => navigate("/")}>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-nobel-gold pb-1 text-xl font-serif font-bold text-white shadow-sm">
-              E
+      {!isStandaloneAssessmentRoute ? (
+        <nav className={`fixed left-0 right-0 top-0 z-50 transition-all duration-300 ${scrolled ? "bg-[#F9F8F4]/90 py-4 shadow-sm backdrop-blur-md" : "bg-transparent py-6"}`}>
+          <div className="container mx-auto flex items-center justify-between px-4 sm:px-6">
+            <div className="flex cursor-pointer items-center gap-4" onClick={() => navigate("/")}>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-nobel-gold pb-1 text-xl font-serif font-bold text-white shadow-sm">
+                E
+              </div>
+              <span className={`font-serif text-lg font-bold tracking-wide transition-opacity ${scrolled || !isLandingSurface ? "opacity-100" : "opacity-0 md:opacity-100"}`}>
+                ELITE GLOBAL AI <span className="font-normal text-stone-500">Assessment</span>
+              </span>
             </div>
-            <span className={`font-serif text-lg font-bold tracking-wide transition-opacity ${scrolled || !isLandingSurface ? "opacity-100" : "opacity-0 md:opacity-100"}`}>
-              ELITE GLOBAL AI <span className="font-normal text-stone-500">Assessment</span>
-            </span>
+            {renderTopNav()}
           </div>
-          {renderTopNav()}
-        </div>
-      </nav>
+        </nav>
+      ) : null}
 
-      {renderMobileMenu()}
+      {!isStandaloneAssessmentRoute ? renderMobileMenu() : null}
 
-      {isLandingSurface ? renderLanding() : null}
+      {showLandingBackdrop ? renderLanding() : null}
       {route.name === "dashboard" ? renderDashboard() : null}
       {route.name === "start" ? renderStart() : null}
+      {route.name === "director-setup" ? renderDirectorSetup() : null}
       {route.name === "assessment" ? renderAssessment() : null}
-      {route.name === "complete" ? renderComplete() : null}
+      {route.name === "assessment-details" ? renderAssessmentDetails() : null}
+      {route.name === "assessment-processing" ? renderAssessmentProcessing() : null}
+      {route.name === "assessment-result" ? renderAssessmentResult() : null}
       {route.name === "admin" ? renderAdmin() : null}
 
-      {route.name !== "assessment" && route.name !== "start" ? (
+      {!isAssessmentExperienceRoute ? (
         <footer className="border-t border-slate-800 bg-[#0f172a] text-slate-300">
           <div className="container mx-auto px-5 py-14 sm:px-6">
             <div className="grid gap-10 lg:grid-cols-[1.2fr_0.75fr_0.95fr]">

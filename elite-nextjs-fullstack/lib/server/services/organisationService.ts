@@ -634,6 +634,40 @@ export async function getAssessmentInvitePrefillByOrganisationId(
   };
 }
 
+export async function resolveOrganisationByName(
+  orgName: string
+): Promise<{
+  organisationId: string;
+  organisationKey: string;
+  firmType: FirmType;
+  orgName: string;
+}> {
+  const normalizedOrgName = normalizeOrganisationName(orgName);
+  const organisationKey = buildOrganisationKey(normalizedOrgName);
+  const organisation = await OrganisationModel.findOne(
+    { domain: organisationKey },
+    {
+      domain: 1,
+      firmType: 1,
+      orgName: 1
+    }
+  ).lean();
+
+  if (!organisation) {
+    throw new HttpError(
+      404,
+      "We couldn't find that organisation yet. Ask your director to set up your team first."
+    );
+  }
+
+  return {
+    organisationId: String(organisation._id),
+    organisationKey: organisation.domain,
+    firmType: organisation.firmType || "financial-services",
+    orgName: organisation.orgName
+  };
+}
+
 export async function getPublicDashboardSnapshot(): Promise<PublicDashboardSnapshot> {
   const organisations = await listOrganisationDashboards();
   const participatingOrganisations = organisations

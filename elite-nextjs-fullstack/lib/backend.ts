@@ -5,6 +5,8 @@ import {
   type AdminAuthCredential
 } from "@/lib/api";
 import type {
+  AssessmentCompleteResponse,
+  AssessmentCompletionPayload,
   AssessmentInvitePrefillResponse,
   AssessmentSubmissionPayload,
   DirectorOnboardingPayload,
@@ -12,6 +14,7 @@ import type {
   Organisation,
   OrganisationStatusResponse,
   PublicDashboardResponse,
+  ResolvedOrganisationResponse,
   ValidateEmailResponse
 } from "@/lib/shared/types";
 
@@ -21,8 +24,10 @@ export const BACKEND_ENDPOINTS = {
   },
   assessment: {
     validateEmail: "/api/assessment/validate-email",
+    resolveOrganisation: "/api/assessment/resolve-organisation",
     directorOnboard: "/api/assessment/director-onboard",
     invite: (inviteToken: string) => `/api/assessment/invite/${inviteToken}`,
+    complete: "/api/assessment/complete",
     submit: "/api/assessment/submit",
     status: (organisationId: string) => `/api/assessment/status/${organisationId}`
   },
@@ -53,28 +58,14 @@ export interface HealthResponse {
 }
 
 export interface AssessmentSubmitResponse {
-  message: string;
-  submissionId: string;
-  organisationId: string;
-  organisationKey: string;
+  message: AssessmentCompleteResponse["message"];
+  submissionId: AssessmentCompleteResponse["submissionId"];
+  organisationId: AssessmentCompleteResponse["organisationId"];
+  organisationKey: AssessmentCompleteResponse["organisationKey"];
   firmType: Organisation["firmType"];
-  respondentScore: {
-    totalScore: number;
-    dimensionScores: {
-      aiLiteracy: number;
-      dataReadiness: number;
-      aiStrategy: number;
-      workflowAdoption: number;
-      ethicsCompliance: number;
-    };
-    readinessLevel: string;
-  };
-  organisationStatus: {
-    status: Organisation["status"];
-    submissionCount: number;
-    expectedRespondents: number | null;
-    aggregatedScores: Organisation["aggregatedScores"];
-  };
+  respondentScore: AssessmentCompleteResponse["respondentScore"];
+  organisationStatus: AssessmentCompleteResponse["organisationStatus"];
+  reportDelivery: AssessmentCompleteResponse["reportDelivery"];
 }
 
 export interface OrganisationsListResponse {
@@ -149,6 +140,14 @@ export const backendApi = {
         method: "POST",
         body: JSON.stringify({ email })
       }),
+    resolveOrganisation: (orgName: string) =>
+      apiRequest<ResolvedOrganisationResponse>(
+        BACKEND_ENDPOINTS.assessment.resolveOrganisation,
+        {
+          method: "POST",
+          body: JSON.stringify({ orgName })
+        }
+      ),
     directorOnboard: (payload: DirectorOnboardingPayload) =>
       apiRequest<DirectorOnboardingResponse>(BACKEND_ENDPOINTS.assessment.directorOnboard, {
         method: "POST",
@@ -160,6 +159,11 @@ export const backendApi = {
       ),
     submit: (payload: AssessmentSubmissionPayload) =>
       apiRequest<AssessmentSubmitResponse>(BACKEND_ENDPOINTS.assessment.submit, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      }),
+    complete: (payload: AssessmentCompletionPayload) =>
+      apiRequest<AssessmentCompleteResponse>(BACKEND_ENDPOINTS.assessment.complete, {
         method: "POST",
         body: JSON.stringify(payload)
       }),

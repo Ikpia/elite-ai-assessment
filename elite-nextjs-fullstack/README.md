@@ -188,6 +188,20 @@ RESEND_API_KEY=
 RESEND_FROM_EMAIL=reports@eliteglobalai.com
 ```
 
+### Optional Report Branding
+
+Use these if you want the generated PDF report to show a specific Calendly link or contact block on the final page:
+
+```env
+REPORT_CALENDLY_URL=https://calendly.com/eliteglobalai
+REPORT_CONTACT_NAME=Vwakpor Efuetanu
+REPORT_CONTACT_ROLE=CEO, Elite Global AI
+REPORT_CONTACT_EMAIL=reports@eliteglobalai.com
+REPORT_CONTACT_PHONE=
+REPORT_CONTACT_LINKEDIN=https://www.linkedin.com/company/elite-global-ai
+REPORT_CONTACT_WEBSITE=https://eliteglobalai.com
+```
+
 Notes:
 - In development, failed email delivery falls back to `mock` mode instead of crashing the flow
 - In production, delivery failures are returned as API errors

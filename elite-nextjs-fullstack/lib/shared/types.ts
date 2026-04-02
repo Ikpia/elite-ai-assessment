@@ -1,4 +1,10 @@
-export type RoleLevel = "director" | "c-suite" | "manager" | "ic";
+export type RoleLevel =
+  | "director"
+  | "c-suite"
+  | "senior-manager"
+  | "manager"
+  | "specialist"
+  | "ic";
 export type FirmType =
   | "financial-services"
   | "healthcare"
@@ -19,6 +25,8 @@ export interface SubmissionDraft {
   name: string;
   role: RoleLevel | "";
   dept: string;
+  phone: string;
+  attribution: string;
   consentAccepted: boolean;
 }
 
@@ -28,7 +36,22 @@ export interface AssessmentSubmissionPayload {
   respondentEmail: string;
   respondentName: string;
   respondentRole: RoleLevel;
-  respondentDept: string;
+  respondentDept?: string | null;
+  respondentPhone?: string | null;
+  attributionSource?: string | null;
+  consentAccepted: true;
+  answers: SubmissionAnswer[];
+}
+
+export interface AssessmentCompletionPayload {
+  firmType: FirmType;
+  orgName: string;
+  respondentEmail: string;
+  respondentName: string;
+  respondentRole: RoleLevel;
+  respondentDept?: string | null;
+  respondentPhone?: string | null;
+  attributionSource?: string | null;
   consentAccepted: true;
   answers: SubmissionAnswer[];
 }
@@ -62,6 +85,13 @@ export interface DirectorOnboardingResponse {
 }
 
 export interface AssessmentInvitePrefillResponse {
+  organisationId: string;
+  organisationKey: string;
+  firmType: FirmType;
+  orgName: string;
+}
+
+export interface ResolvedOrganisationResponse {
   organisationId: string;
   organisationKey: string;
   firmType: FirmType;
@@ -139,6 +169,38 @@ export interface PublicDashboardResponse {
   sectors: PublicDashboardSector[];
   organisations: PublicDashboardOrganisation[];
   generatedAt: string;
+}
+
+export interface AssessmentCompleteResponse {
+  message: string;
+  submissionId: string;
+  organisationId: string;
+  organisationKey: string;
+  firmType: FirmType;
+  respondentScore: {
+    totalScore: number;
+    dimensionScores: {
+      aiLiteracy: number;
+      dataReadiness: number;
+      aiStrategy: number;
+      workflowAdoption: number;
+      ethicsCompliance: number;
+    };
+    readinessLevel: string;
+  };
+  organisationStatus: {
+    status: OrganisationStatus;
+    submissionCount: number;
+    expectedRespondents: number | null;
+    aggregatedScores: AggregateScores;
+  };
+  reportDelivery: {
+    recipientEmail: string;
+    deliveryMode: "mock" | "live";
+    messageId: string | null;
+    viewUrl: string;
+    generatedAt: string;
+  };
 }
 
 export interface QuestionOption {

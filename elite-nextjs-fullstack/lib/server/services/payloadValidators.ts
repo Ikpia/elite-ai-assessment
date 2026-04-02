@@ -1,6 +1,7 @@
 import { FIRM_TYPES, ROLE_LEVELS } from "../constants/assessment";
 import type {
   AssessmentAnswerInput,
+  AssessmentCompletionPayload,
   FirmType,
   RoleLevel,
   SubmissionPayload
@@ -21,6 +22,19 @@ function requireString(value: unknown, label: string): string {
   }
 
   return value.trim();
+}
+
+function parseOptionalString(value: unknown, label: string): string | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    throw new HttpError(400, `${label} must be a string.`);
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 function parseRole(value: unknown): RoleLevel {
@@ -90,6 +104,14 @@ export function parseAdminAccessRequestBody(body: unknown): { email: string } {
   const payload = asRecord(body, "Request body");
   return {
     email: requireString(payload.email, "email")
+  };
+}
+
+export function parseResolveOrganisationBody(body: unknown): { orgName: string } {
+  const payload = asRecord(body, "Request body");
+
+  return {
+    orgName: requireString(payload.orgName, "orgName")
   };
 }
 
@@ -178,10 +200,21 @@ export function parseSubmissionPayload(body: unknown): SubmissionPayload {
     respondentEmail: requireString(payload.respondentEmail, "respondentEmail"),
     respondentName: requireString(payload.respondentName, "respondentName"),
     respondentRole: parseRole(payload.respondentRole),
-    respondentDept: requireString(payload.respondentDept, "respondentDept"),
+    respondentDept: parseOptionalString(payload.respondentDept, "respondentDept"),
+    respondentPhone: parseOptionalString(payload.respondentPhone, "respondentPhone"),
+    attributionSource: parseOptionalString(
+      payload.attributionSource,
+      "attributionSource"
+    ),
     consentAccepted: true,
     answers: parseAnswers(payload.answers)
   };
+}
+
+export function parseAssessmentCompletionBody(
+  body: unknown
+): AssessmentCompletionPayload {
+  return parseSubmissionPayload(body);
 }
 
 export function parseOrganisationUpdateBody(

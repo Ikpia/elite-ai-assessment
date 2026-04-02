@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { parseSubmissionPayload } from "@/lib/server/services/payloadValidators";
+import { parseAssessmentCompletionBody } from "@/lib/server/services/payloadValidators";
 import { submitAssessmentAndGenerateImmediateReport } from "@/lib/server/services/submissionService";
 import {
   ensureServerInitialized,
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     await ensureServerInitialized();
 
     const body = await request.json();
-    const payload = parseSubmissionPayload(body);
+    const payload = parseAssessmentCompletionBody(body);
     const response = await submitAssessmentAndGenerateImmediateReport({
       payload,
       requestUrl: request.url

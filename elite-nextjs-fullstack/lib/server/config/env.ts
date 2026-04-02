@@ -73,5 +73,23 @@ export const env = {
   appBaseUrl: getOptionalString("APP_BASE_URL") || `http://localhost:${port}`,
   superAdminEmails: getStringList("SUPER_ADMIN_EMAILS"),
   reportBenchmarkLocal: getNumber("REPORT_BENCHMARK_LOCAL", 31),
-  reportBenchmarkGlobal: getNumber("REPORT_BENCHMARK_GLOBAL", 68)
+  reportBenchmarkGlobal: getNumber("REPORT_BENCHMARK_GLOBAL", 68),
+  reportCalendlyUrl:
+    getOptionalString("REPORT_CALENDLY_URL") || "https://calendly.com/eliteglobalai",
+  reportContactName:
+    getOptionalString("REPORT_CONTACT_NAME") || "Vwakpor Efuetanu",
+  reportContactRole:
+    getOptionalString("REPORT_CONTACT_ROLE") || "CEO, Elite Global AI",
+  reportContactEmail:
+    getOptionalString("REPORT_CONTACT_EMAIL") ||
+    getOptionalString("RESEND_FROM_EMAIL") ||
+    "reports@eliteglobalai.com",
+  reportContactPhone:
+    getOptionalString("REPORT_CONTACT_PHONE") || "Phone available on request",
+  reportContactLinkedin:
+    getOptionalString("REPORT_CONTACT_LINKEDIN") || "https://www.linkedin.com/company/elite-global-ai",
+  reportContactWebsite:
+    getOptionalString("REPORT_CONTACT_WEBSITE") ||
+    getOptionalString("NEXT_PUBLIC_MARKETING_SITE_URL") ||
+    "https://eliteglobalai.com"
 };

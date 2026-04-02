@@ -1,4 +1,10 @@
-export type RoleLevel = "director" | "c-suite" | "manager" | "ic";
+export type RoleLevel =
+  | "director"
+  | "c-suite"
+  | "senior-manager"
+  | "manager"
+  | "specialist"
+  | "ic";
 export type FirmType =
   | "financial-services"
   | "healthcare"
@@ -76,7 +82,22 @@ export interface SubmissionPayload {
   respondentEmail: string;
   respondentName: string;
   respondentRole: RoleLevel;
-  respondentDept: string;
+  respondentDept?: string | null;
+  respondentPhone?: string | null;
+  attributionSource?: string | null;
+  consentAccepted: boolean;
+  answers: AssessmentAnswerInput[];
+}
+
+export interface AssessmentCompletionPayload {
+  firmType: FirmType;
+  orgName: string;
+  respondentEmail: string;
+  respondentName: string;
+  respondentRole: RoleLevel;
+  respondentDept?: string | null;
+  respondentPhone?: string | null;
+  attributionSource?: string | null;
   consentAccepted: boolean;
   answers: AssessmentAnswerInput[];
 }
@@ -95,10 +116,83 @@ export interface DimensionInsight {
   recommendation: string;
 }
 
+export interface ReportQuestionAnalysis {
+  questionId: number;
+  label: string;
+  averageScore: number;
+  maxScore: number;
+  observedAnswerLabel: string | null;
+  finding: string;
+}
+
+export interface ReportDimensionSection {
+  key: DimensionKey;
+  label: string;
+  score: number;
+  benchmarkScore: number;
+  comparison: "above" | "at" | "below";
+  findings: ReportQuestionAnalysis[];
+}
+
+export interface ReportPriorityGap {
+  questionId: number;
+  label: string;
+  averageScore: number;
+  priority: "CRITICAL" | "HIGH" | "MEDIUM";
+  description: string;
+  businessImpact: string;
+  requirement: string;
+}
+
+export interface ReportDistributionBand {
+  label: string;
+  min: number;
+  max: number;
+  percentage: number;
+  count: number;
+  containsOrganisation: boolean;
+}
+
+export interface ReportSectorBenchmark {
+  industryLabel: string;
+  industryPlural: string;
+  peerGroupLabel: string;
+  localAverageLabel: string;
+  localAverageScore: number;
+  globalAverageLabel: string;
+  globalAverageScore: number;
+  globalGap: number;
+  percentile: number;
+  percentileLabel: string;
+  peerOrganisationCount: number;
+  dimensionBenchmarkScores: DimensionScores;
+  distributionBands: ReportDistributionBand[];
+  benchmarkNarrative: string;
+}
+
+export interface ReportNextSteps {
+  briefingTitle: string;
+  briefingDescription: string;
+  briefingUrl: string;
+  programmeTitle: string;
+  programmeDescription: string;
+  measurementTitle: string;
+  measurementDescription: string;
+}
+
+export interface ReportContactDetails {
+  name: string;
+  role: string;
+  email: string;
+  phone: string;
+  linkedin: string;
+  website: string;
+}
+
 export interface ReportRespondentScore {
   respondentName: string;
   respondentRole: RoleLevel;
-  respondentDept: string;
+  respondentDept: string | null;
   totalScore: number;
   readinessLevel: ReadinessLevel;
 }
@@ -116,12 +210,18 @@ export interface ReportData {
   aggregatedScores: AggregateScores;
   readinessLevel: ReadinessLevel;
   readinessDescription: string;
+  executiveSummary: string;
   benchmarkLocal: number;
   benchmarkGlobal: number;
   benchmarkGapLocal: number;
   benchmarkGapGlobal: number;
   strongestDimension: DimensionInsight;
   weakestDimensions: DimensionInsight[];
+  dimensionSections: ReportDimensionSection[];
+  priorityGaps: ReportPriorityGap[];
+  sectorBenchmark: ReportSectorBenchmark;
+  nextSteps: ReportNextSteps;
+  contact: ReportContactDetails;
   respondents: ReportRespondentScore[];
 }
 

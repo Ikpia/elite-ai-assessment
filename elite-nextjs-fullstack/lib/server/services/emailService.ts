@@ -74,6 +74,46 @@ function buildReportEmailHtml(reportData: ReportData): string {
   `;
 }
 
+function buildRespondentReportEmailHtml(params: {
+  reportData: ReportData;
+  respondentName: string;
+  viewUrl: string;
+}): string {
+  const { reportData, respondentName, viewUrl } = params;
+
+  return `
+    <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+      <h1 style="margin-bottom: 8px;">Your AI Readiness Report Is Ready</h1>
+      <p style="margin-top: 0;">Hello ${respondentName},</p>
+      <p>
+        We have generated the latest readiness snapshot for <strong>${reportData.orgName}</strong>.
+      </p>
+      <p>
+        Overall readiness score:
+        <strong>${reportData.aggregatedScores.total}/100</strong>
+        (${reportData.readinessLevel})
+      </p>
+      <p>
+        Responses captured so far: <strong>${reportData.submittedRespondents}</strong>
+      </p>
+      <p>
+        You can open the live report immediately or review the PDF snapshot attached to this email.
+      </p>
+      <p>
+        <a
+          href="${viewUrl}"
+          style="display:inline-block;padding:12px 20px;border-radius:999px;background:#0b5fff;color:#ffffff;text-decoration:none;font-weight:700;"
+        >
+          View My Report Now
+        </a>
+      </p>
+      <p>
+        The secure link always opens the latest organisation snapshot as more team responses arrive.
+      </p>
+    </div>
+  `;
+}
+
 function buildAdminAccessEmailHtml(params: {
   accessLabel: string;
   accessUrl: string;
@@ -288,6 +328,34 @@ export async function sendOrganisationReportEmail(params: {
       }
     ],
     failureMessage: "Report email delivery failed."
+  });
+}
+
+export async function sendRespondentReportEmail(params: {
+  respondentEmail: string;
+  respondentName: string;
+  filename: string;
+  pdfBuffer: Buffer;
+  reportData: ReportData;
+  viewUrl: string;
+}): Promise<EmailDeliveryResult> {
+  const { respondentEmail, respondentName, filename, pdfBuffer, reportData, viewUrl } = params;
+
+  return sendWithConfiguredProvider({
+    to: respondentEmail,
+    subject: `Your ${reportData.orgName} AI Readiness Report`,
+    html: buildRespondentReportEmailHtml({
+      reportData,
+      respondentName,
+      viewUrl
+    }),
+    attachments: [
+      {
+        filename,
+        content: pdfBuffer
+      }
+    ],
+    failureMessage: "Respondent report email delivery failed."
   });
 }
 
