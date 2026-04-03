@@ -11,6 +11,7 @@ import {
 import { OrganisationModel } from "../models/organisation";
 import { SubmissionModel } from "../models/submission";
 import { OrganisationReport } from "../reports/OrganisationReport";
+import { RespondentReport } from "../reports/RespondentReport";
 import type {
   AggregateScores,
   DimensionInsight,
@@ -26,6 +27,7 @@ import type {
   ReportPriorityGap,
   ReportQuestionAnalysis,
   ReportRespondentScore,
+  RespondentReportData,
   ReportSectorBenchmark,
   ScoredAnswerRecord
 } from "../types/assessment";
@@ -735,6 +737,113 @@ function buildContactDetails(): ReportContactDetails {
   };
 }
 
+async function resolveRespondentSubmission(params: {
+  organisationId: string;
+  recipientEmail: string;
+  submissionId?: string;
+}) {
+  const organisation = await OrganisationModel.findById(params.organisationId).select({ domain: 1 });
+
+  if (!organisation) {
+    throw new HttpError(404, "Organisation not found.");
+  }
+
+  const submissionQuery = params.submissionId
+    ? {
+        _id: params.submissionId,
+        orgDomain: organisation.domain,
+        respondentEmail: params.recipientEmail
+      }
+    : {
+        orgDomain: organisation.domain,
+        respondentEmail: params.recipientEmail
+      };
+
+  const submission = await SubmissionModel.findOne(submissionQuery)
+    .sort(params.submissionId ? undefined : { submittedAt: -1 })
+    .select({
+      orgDomain: 1,
+      firmType: 1,
+      orgName: 1,
+      respondentEmail: 1,
+      respondentName: 1,
+      respondentRole: 1,
+      respondentDept: 1,
+      dimensionScores: 1,
+      totalScore: 1,
+      submittedAt: 1
+    });
+
+  if (!submission) {
+    throw new HttpError(404, "Respondent report not found.");
+  }
+
+  return {
+    organisationId: organisation.id,
+    submission
+  };
+}
+
+function buildRespondentPersonalSummary(params: {
+  respondentName: string;
+  readinessLevel: ReadinessLevel;
+  strongestDimension: DimensionInsight;
+  weakestDimension: DimensionInsight;
+}): string {
+  return `${params.respondentName}, your submission places you in the ${params.readinessLevel} stage. Your strongest area is ${params.strongestDimension.label}, while ${params.weakestDimension.label} is the clearest development priority in your current response pattern.`;
+}
+
+export async function buildRespondentReportData(params: {
+  organisationId: string;
+  recipientEmail: string;
+  submissionId?: string;
+}): Promise<RespondentReportData> {
+  const { organisationId, submission } = await resolveRespondentSubmission(params);
+  const readinessLevel = getReadinessLevel(submission.totalScore);
+  const readinessDescription = getReadinessDescription(submission.totalScore).replace(
+    /\[Organisation Name\]/g,
+    submission.orgName
+  );
+  const dimensionInsights = buildDimensionInsights({
+    ...submission.dimensionScores,
+    total: submission.totalScore
+  });
+  const strongestDimension = [...dimensionInsights].sort(
+    (left, right) => right.score - left.score
+  )[0];
+  const weakestDimension = [...dimensionInsights].sort(
+    (left, right) => left.score - right.score
+  )[0];
+
+  return {
+    submissionId: submission.id,
+    organisationId,
+    organisationKey: submission.orgDomain,
+    orgName: submission.orgName,
+    firmType: submission.firmType,
+    respondentEmail: submission.respondentEmail,
+    respondentName: submission.respondentName,
+    respondentRole: submission.respondentRole,
+    respondentDept: submission.respondentDept,
+    submittedAt: submission.submittedAt.toISOString(),
+    generatedAt: new Date().toISOString(),
+    totalScore: submission.totalScore,
+    readinessLevel,
+    readinessDescription,
+    personalSummary: buildRespondentPersonalSummary({
+      respondentName: submission.respondentName,
+      readinessLevel,
+      strongestDimension,
+      weakestDimension
+    }),
+    dimensionScores: submission.dimensionScores,
+    dimensionInsights,
+    strongestDimension,
+    weakestDimension,
+    contact: buildContactDetails()
+  };
+}
+
 export async function buildReportData(orgId: string): Promise<ReportData> {
   const organisation = await OrganisationModel.findById(orgId);
 
@@ -865,6 +974,30 @@ export async function generateOrganisationReportPdf(orgId: string): Promise<{
   const buffer = await renderToBuffer(
     reportDocument
   );
+
+  return {
+    filename,
+    buffer,
+    reportData
+  };
+}
+
+export async function generateRespondentReportPdf(params: {
+  organisationId: string;
+  recipientEmail: string;
+  submissionId?: string;
+}): Promise<{
+  filename: string;
+  buffer: Buffer;
+  reportData: RespondentReportData;
+}> {
+  const reportData = await buildRespondentReportData(params);
+  const filename = `${slugify(reportData.orgName)}-${slugify(reportData.respondentName)}-personal-ai-readiness-report.pdf`;
+  const reportDocument = createElement(
+    RespondentReport,
+    { data: reportData }
+  ) as unknown as Parameters<typeof renderToBuffer>[0];
+  const buffer = await renderToBuffer(reportDocument);
 
   return {
     filename,

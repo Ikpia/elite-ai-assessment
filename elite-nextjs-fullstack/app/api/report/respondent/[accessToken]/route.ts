@@ -1,4 +1,4 @@
-import { generateOrganisationReportPdf } from "@/lib/server/services/reportService";
+import { generateRespondentReportPdf } from "@/lib/server/services/reportService";
 import { verifyReportAccessToken } from "@/lib/server/utils/reportAccess";
 import {
   ensureServerInitialized,
@@ -18,7 +18,11 @@ export async function GET(
 
     const params = await context.params;
     const payload = verifyReportAccessToken(params.accessToken);
-    const { filename, buffer } = await generateOrganisationReportPdf(payload.organisationId);
+    const { filename, buffer } = await generateRespondentReportPdf({
+      organisationId: payload.organisationId,
+      recipientEmail: payload.recipientEmail,
+      submissionId: payload.submissionId
+    });
     const pdfBytes = new Uint8Array(buffer);
 
     return new Response(pdfBytes, {

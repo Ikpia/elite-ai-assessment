@@ -2174,26 +2174,6 @@ export function AssessmentShell() {
 
   const landingNavItems = [
     {
-      label: "Organisations",
-      description: "See the capability gap, business risk, and organisational readiness case.",
-      action: () => openLandingSection("introduction")
-    },
-    {
-      label: "Professionals",
-      description: "Take the free assessment and understand where your team stands now.",
-      action: openAssessmentEntry
-    },
-    {
-      label: "Method",
-      description: "Understand how Elite Global AI measures, develops, and proves readiness.",
-      action: () => openLandingSection("science")
-    },
-    {
-      label: "Team",
-      description: "Meet the practitioner-led team behind the assessment and capability model.",
-      action: () => openLandingSection("authors")
-    },
-    {
       label: "Insights",
       description: "Review live benchmark data and public readiness signals.",
       action: () => navigate("/dashboard")
@@ -2220,10 +2200,10 @@ export function AssessmentShell() {
                 {item.label}
               </button>
             ))}
-            <button type="button" onClick={openAssessmentEntry} className={ghostButtonClasses}>
+            <button type="button" onClick={openAssessmentEntry} className={sharedButtonClasses}>
               Take the Free Assessment
             </button>
-            <button type="button" onClick={openTeamConversation} className={sharedButtonClasses}>
+            <button type="button" onClick={openTeamConversation} className={ghostButtonClasses}>
               Speak With Our Team
             </button>
           </div>

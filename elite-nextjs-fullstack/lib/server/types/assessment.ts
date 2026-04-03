@@ -197,6 +197,29 @@ export interface ReportRespondentScore {
   readinessLevel: ReadinessLevel;
 }
 
+export interface RespondentReportData {
+  submissionId: string;
+  organisationId: string;
+  organisationKey: string;
+  orgName: string;
+  firmType: FirmType;
+  respondentEmail: string;
+  respondentName: string;
+  respondentRole: RoleLevel;
+  respondentDept: string | null;
+  submittedAt: string;
+  generatedAt: string;
+  totalScore: number;
+  readinessLevel: ReadinessLevel;
+  readinessDescription: string;
+  personalSummary: string;
+  dimensionScores: DimensionScores;
+  dimensionInsights: DimensionInsight[];
+  strongestDimension: DimensionInsight;
+  weakestDimension: DimensionInsight;
+  contact: ReportContactDetails;
+}
+
 export interface ReportData {
   organisationId: string;
   orgName: string;

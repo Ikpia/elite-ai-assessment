@@ -10,6 +10,7 @@ interface ReportAccessPayload {
   v: number;
   organisationId: string;
   recipientEmail: string;
+  submissionId?: string;
   exp: number;
 }
 
@@ -47,12 +48,14 @@ function signaturesMatch(left: string, right: string): boolean {
 export function createReportAccessToken(params: {
   organisationId: string;
   recipientEmail: string;
+  submissionId?: string;
   expiresInMs?: number;
 }): string {
   const payload: ReportAccessPayload = {
     v: REPORT_ACCESS_TOKEN_VERSION,
     organisationId: params.organisationId.trim(),
     recipientEmail: params.recipientEmail.trim().toLowerCase(),
+    ...(params.submissionId ? { submissionId: params.submissionId.trim() } : {}),
     exp: Date.now() + (params.expiresInMs || REPORT_ACCESS_TTL_MS)
   };
 
@@ -85,6 +88,8 @@ export function verifyReportAccessToken(token: string): ReportAccessPayload {
     !payload.organisationId.trim() ||
     typeof payload.recipientEmail !== "string" ||
     !payload.recipientEmail.trim() ||
+    (payload.submissionId !== undefined &&
+      (typeof payload.submissionId !== "string" || !payload.submissionId.trim())) ||
     typeof payload.exp !== "number" ||
     payload.exp <= Date.now()
   ) {
@@ -94,6 +99,7 @@ export function verifyReportAccessToken(token: string): ReportAccessPayload {
   return {
     ...payload,
     organisationId: payload.organisationId.trim(),
-    recipientEmail: payload.recipientEmail.trim().toLowerCase()
+    recipientEmail: payload.recipientEmail.trim().toLowerCase(),
+    ...(payload.submissionId ? { submissionId: payload.submissionId.trim() } : {})
   };
 }

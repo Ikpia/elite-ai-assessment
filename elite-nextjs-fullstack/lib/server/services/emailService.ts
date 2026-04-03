@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import { Resend } from "resend";
 
 import { env } from "../config/env";
-import type { ReportData } from "../types/assessment";
+import type { ReportData, RespondentReportData } from "../types/assessment";
 import { HttpError } from "../utils/httpError";
 
 type EmailDeliveryResult = {
@@ -75,29 +75,34 @@ function buildReportEmailHtml(reportData: ReportData): string {
 }
 
 function buildRespondentReportEmailHtml(params: {
-  reportData: ReportData;
-  respondentName: string;
+  reportData: RespondentReportData;
   viewUrl: string;
 }): string {
-  const { reportData, respondentName, viewUrl } = params;
+  const { reportData, viewUrl } = params;
 
   return `
     <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.6;">
       <h1 style="margin-bottom: 8px;">Your AI Readiness Report Is Ready</h1>
-      <p style="margin-top: 0;">Hello ${respondentName},</p>
+      <p style="margin-top: 0;">Hello ${reportData.respondentName},</p>
       <p>
-        We have generated the latest readiness snapshot for <strong>${reportData.orgName}</strong>.
+        Your personal assessment report for <strong>${reportData.orgName}</strong> is now ready.
       </p>
       <p>
-        Overall readiness score:
-        <strong>${reportData.aggregatedScores.total}/100</strong>
+        Your readiness score:
+        <strong>${reportData.totalScore}/100</strong>
         (${reportData.readinessLevel})
       </p>
       <p>
-        Responses captured so far: <strong>${reportData.submittedRespondents}</strong>
+        Strongest dimension: <strong>${reportData.strongestDimension.label}</strong>
       </p>
       <p>
-        You can open the live report immediately or review the PDF snapshot attached to this email.
+        Priority area: <strong>${reportData.weakestDimension.label}</strong>
+      </p>
+      <p>
+        This report covers only your own response pattern, score, and dimension breakdown. It does not include other team members' submissions or organisation-wide summaries.
+      </p>
+      <p>
+        You can open your secure report link immediately or review the PDF snapshot attached to this email.
       </p>
       <p>
         <a
@@ -108,7 +113,10 @@ function buildRespondentReportEmailHtml(params: {
         </a>
       </p>
       <p>
-        The secure link always opens the latest organisation snapshot as more team responses arrive.
+        Submitted on: <strong>${new Date(reportData.submittedAt).toLocaleString("en-US", {
+          dateStyle: "medium",
+          timeStyle: "short"
+        })}</strong>
       </p>
     </div>
   `;
@@ -333,20 +341,18 @@ export async function sendOrganisationReportEmail(params: {
 
 export async function sendRespondentReportEmail(params: {
   respondentEmail: string;
-  respondentName: string;
   filename: string;
   pdfBuffer: Buffer;
-  reportData: ReportData;
+  reportData: RespondentReportData;
   viewUrl: string;
 }): Promise<EmailDeliveryResult> {
-  const { respondentEmail, respondentName, filename, pdfBuffer, reportData, viewUrl } = params;
+  const { respondentEmail, filename, pdfBuffer, reportData, viewUrl } = params;
 
   return sendWithConfiguredProvider({
     to: respondentEmail,
-    subject: `Your ${reportData.orgName} AI Readiness Report`,
+    subject: `Your ${reportData.orgName} Personal AI Readiness Report`,
     html: buildRespondentReportEmailHtml({
       reportData,
-      respondentName,
       viewUrl
     }),
     attachments: [

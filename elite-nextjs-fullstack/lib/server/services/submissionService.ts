@@ -17,7 +17,7 @@ import {
   ensureOrganisationExists,
   refreshOrganisationAggregation
 } from "./organisationService";
-import { generateOrganisationReportPdf } from "./reportService";
+import { generateRespondentReportPdf } from "./reportService";
 import { scoreAssessment } from "./scoringService";
 
 export async function submitAssessmentAndGenerateImmediateReport(params: {
@@ -66,18 +66,20 @@ export async function submitAssessmentAndGenerateImmediateReport(params: {
   const organisation = await refreshOrganisationAggregation(organisationKey);
   const reportAccessToken = createReportAccessToken({
     organisationId: organisation.organisationId,
-    recipientEmail: emailValidation.normalizedEmail
+    recipientEmail: emailValidation.normalizedEmail,
+    submissionId: submission.id
   });
   const reportViewUrl = new URL(
     `/api/report/respondent/${reportAccessToken}`,
     requestUrl
   ).toString();
-  const { filename, buffer, reportData } = await generateOrganisationReportPdf(
-    organisation.organisationId
-  );
+  const { filename, buffer, reportData } = await generateRespondentReportPdf({
+    organisationId: organisation.organisationId,
+    recipientEmail: emailValidation.normalizedEmail,
+    submissionId: submission.id
+  });
   const delivery = await sendRespondentReportEmail({
     respondentEmail: emailValidation.normalizedEmail,
-    respondentName: payload.respondentName,
     filename,
     pdfBuffer: buffer,
     reportData,
