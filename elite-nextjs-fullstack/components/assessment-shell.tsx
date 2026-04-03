@@ -139,6 +139,24 @@ const FOOTER_SOCIALS = [
   { label: "Website", href: MARKETING_SITE_URL, icon: Globe }
 ] as const;
 
+const METHOD_STEPS = [
+  {
+    step: "01",
+    title: "Measure",
+    description: "Map readiness across the five capability dimensions and surface where momentum is weakest first."
+  },
+  {
+    step: "02",
+    title: "Develop",
+    description: "Target the exact gaps with practitioner-led learning, workflow support, and operating guidance."
+  },
+  {
+    step: "03",
+    title: "Prove",
+    description: "Track improvement with before-and-after evidence leadership can review, report, and defend."
+  }
+] as const;
+
 const EMPTY_ENTRY_DRAFT: SubmissionDraft = {
   firmType: "",
   orgName: "",
@@ -2443,7 +2461,7 @@ export function AssessmentShell() {
 
         <section id="science" className="border-t border-stone-100 bg-white py-20 sm:py-24">
           <div className="container mx-auto px-5 sm:px-6">
-            <div className="mx-auto mb-12 max-w-4xl text-center">
+            <div className="mx-auto mb-10 max-w-4xl text-center lg:mb-12">
               <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-xs font-bold uppercase tracking-widest text-stone-600">
                 <BookOpen size={14} />
                 OUR METHOD
@@ -2463,8 +2481,25 @@ export function AssessmentShell() {
                 </p>
               </div>
             </div>
-            <div className="mx-auto max-w-4xl">
-              <SurfaceCodeDiagram />
+            <div className="grid gap-8 xl:grid-cols-[minmax(260px,0.78fr)_minmax(0,1.22fr)] xl:items-start">
+              <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-1">
+                {METHOD_STEPS.map((item) => (
+                  <div
+                    key={item.step}
+                    className="h-full rounded-[24px] border border-blue-100 bg-[linear-gradient(180deg,rgba(248,251,255,0.88)_0%,rgba(255,255,255,0.98)_100%)] p-5 shadow-[0_18px_40px_rgba(37,99,235,0.06)]"
+                  >
+                    <span className="inline-flex rounded-full border border-blue-100 bg-white px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
+                      {item.step}
+                    </span>
+                    <h3 className="mt-4 font-serif text-[1.42rem] text-stone-900">{item.title}</h3>
+                    <p className="mt-3 text-[15px] leading-7 text-stone-600">{item.description}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="min-w-0">
+                <SurfaceCodeDiagram />
+              </div>
             </div>
           </div>
         </section>

@@ -18,9 +18,9 @@ const PENTAGON_DIMENSIONS = [
   { key: 'ethicsCompliance', shortLabel: 'Risk' }
 ] as const;
 
-const PENTAGON_SIZE = 220;
+const PENTAGON_SIZE = 240;
 const PENTAGON_CENTER = PENTAGON_SIZE / 2;
-const PENTAGON_RADIUS = 76;
+const PENTAGON_RADIUS = 84;
 const PENTAGON_MAX_SCORE = 20;
 const PENTAGON_LEVELS = [0.25, 0.5, 0.75, 1];
 
@@ -145,13 +145,15 @@ export const SurfaceCodeDiagram: React.FC = () => {
   const activeGapSet = new Set(activeGaps);
 
   return (
-    <div className="my-8 flex w-full flex-col items-center rounded-[28px] border border-stone-200 bg-white p-6 shadow-sm sm:p-8">
-      <h3 className="mb-4 text-center font-serif text-xl text-stone-800">Interactive: Capability Signal Map</h3>
-      <p className="mb-6 max-w-2xl text-center text-sm text-stone-500">
-        Select a readiness dimension to simulate pressure. The pentagon contracts as capability weakens across <strong>literacy</strong>, <strong>data</strong>, <strong>process</strong>, <strong>leadership</strong>, and <strong>risk</strong>.
-      </p>
+    <div className="flex w-full flex-col rounded-[30px] border border-blue-100/80 bg-[linear-gradient(180deg,rgba(248,251,255,0.94)_0%,rgba(255,255,255,0.98)_100%)] p-5 shadow-[0_20px_52px_rgba(37,99,235,0.08)] sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-3xl text-center">
+        <h3 className="mb-4 font-serif text-xl text-stone-800 sm:text-[1.55rem]">Interactive: Capability Signal Map</h3>
+        <p className="text-sm leading-7 text-stone-500 sm:text-[15px]">
+          Select a readiness dimension to simulate pressure. The pentagon contracts as capability weakens across <strong>literacy</strong>, <strong>data</strong>, <strong>process</strong>, <strong>leadership</strong>, and <strong>risk</strong>.
+        </p>
+      </div>
 
-      <div className="mt-8 w-full max-w-[38rem] rounded-[24px] border border-blue-100 bg-[#F6FAFF] p-5 shadow-[0_16px_42px_rgba(37,99,235,0.08)]">
+      <div className="mt-6 w-full rounded-[26px] border border-blue-100 bg-[#F6FAFF] p-5 shadow-[0_16px_42px_rgba(37,99,235,0.08)] lg:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
@@ -170,8 +172,8 @@ export const SurfaceCodeDiagram: React.FC = () => {
           Click any dimension card to simulate a gap and watch the readiness shape respond.
         </p>
 
-        <div className="mt-5 grid gap-6 md:grid-cols-[220px_minmax(0,1fr)] md:items-center">
-          <div className="mx-auto h-[220px] w-[220px]">
+        <div className="mt-6 grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-center xl:gap-8">
+          <div className="mx-auto h-[240px] w-[240px]">
             <svg width={PENTAGON_SIZE} height={PENTAGON_SIZE} viewBox={`0 0 ${PENTAGON_SIZE} ${PENTAGON_SIZE}`} className="overflow-visible">
               <defs>
                 <linearGradient id="capability-pentagon-fill" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -250,7 +252,7 @@ export const SurfaceCodeDiagram: React.FC = () => {
             </svg>
           </div>
 
-          <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             {PENTAGON_DIMENSIONS.map((dimension, index) => {
               const score = dimensionScores[index];
               const isActive = activeGapSet.has(index);
@@ -260,7 +262,7 @@ export const SurfaceCodeDiagram: React.FC = () => {
                   key={dimension.key}
                   type="button"
                   onClick={() => toggleGap(index)}
-                  className={`w-full rounded-2xl border p-3 text-left shadow-sm transition-colors ${
+                  className={`h-full w-full rounded-2xl border p-4 text-left shadow-sm transition-colors ${
                     isActive
                       ? 'border-blue-300 bg-blue-50/90'
                       : 'border-white/70 bg-white/85 hover:border-blue-200 hover:bg-white'
