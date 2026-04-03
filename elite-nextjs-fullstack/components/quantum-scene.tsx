@@ -410,7 +410,7 @@ export const SpinningGlobeScene: React.FC<{ className?: string }> = ({ className
   return (
     <div className={className || 'relative h-full w-full'}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_58%_42%,rgba(191,219,254,0.52),rgba(230,238,246,0.22)_34%,rgba(249,248,244,0)_72%)]" />
-      <div className="relative flex h-full w-full items-start justify-center overflow-visible">
+      <div className="relative flex h-full w-full items-center justify-center overflow-visible">
         <video
           ref={videoRef}
           className="hidden"
@@ -425,7 +425,7 @@ export const SpinningGlobeScene: React.FC<{ className?: string }> = ({ className
         />
         <canvas
           ref={canvasRef}
-          className={`h-[104%] w-[104%] -translate-y-[6%] object-contain drop-shadow-[0_24px_60px_rgba(15,23,42,0.12)] sm:h-[116%] sm:w-[116%] sm:-translate-y-[12%] sm:drop-shadow-[0_30px_80px_rgba(15,23,42,0.12)] ${isReady ? 'opacity-100' : 'opacity-0'}`}
+          className={`h-full w-full object-contain drop-shadow-[0_24px_60px_rgba(15,23,42,0.12)] sm:h-[108%] sm:w-[108%] sm:-translate-y-[4%] sm:drop-shadow-[0_30px_80px_rgba(15,23,42,0.12)] ${isReady ? 'opacity-100' : 'opacity-0'}`}
         />
       </div>
     </div>

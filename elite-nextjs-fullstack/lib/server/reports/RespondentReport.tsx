@@ -25,6 +25,14 @@ const COLORS = {
 
 const MAX_DIMENSION_SCORE = 20;
 
+function clampDimensionScore(score: number): number {
+  if (!Number.isFinite(score)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(MAX_DIMENSION_SCORE, score));
+}
+
 function resolveReportLogo(): string | null {
   const logoPath = join(process.cwd(), "public", "brand", "elite-global-ai-icon.png");
 
@@ -289,23 +297,27 @@ export function RespondentReport({ data }: { data: RespondentReportData }) {
         </View>
 
         <Text style={styles.sectionTitle}>Dimension Breakdown</Text>
-        {data.dimensionInsights.map((dimension) => (
-          <View key={dimension.key} style={styles.dimensionRow}>
-            <View style={styles.dimensionHeader}>
-              <Text style={styles.dimensionLabel}>{dimension.label}</Text>
-              <Text style={styles.dimensionValue}>{dimension.score}/20</Text>
+        {data.dimensionInsights.map((dimension) => {
+          const safeScore = clampDimensionScore(dimension.score);
+
+          return (
+            <View key={dimension.key} style={styles.dimensionRow}>
+              <View style={styles.dimensionHeader}>
+                <Text style={styles.dimensionLabel}>{dimension.label}</Text>
+                <Text style={styles.dimensionValue}>{safeScore}/20</Text>
+              </View>
+              <View style={styles.dimensionTrack}>
+                <View
+                  style={{
+                    ...styles.dimensionFill,
+                    width: `${(safeScore / MAX_DIMENSION_SCORE) * 100}%`
+                  }}
+                />
+              </View>
+              <Text style={styles.dimensionRecommendation}>{dimension.recommendation}</Text>
             </View>
-            <View style={styles.dimensionTrack}>
-              <View
-                style={{
-                  ...styles.dimensionFill,
-                  width: `${(dimension.score / MAX_DIMENSION_SCORE) * 100}%`
-                }}
-              />
-            </View>
-            <Text style={styles.dimensionRecommendation}>{dimension.recommendation}</Text>
-          </View>
-        ))}
+          );
+        })}
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>

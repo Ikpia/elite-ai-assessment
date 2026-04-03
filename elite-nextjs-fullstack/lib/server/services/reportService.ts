@@ -268,6 +268,21 @@ function buildDimensionInsights(aggregatedScores: AggregateScores): DimensionIns
   }));
 }
 
+function toFiniteScore(value: unknown): number {
+  const numericValue = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function normalizeDimensionScores(source: Partial<Record<DimensionKey, unknown>> | undefined): DimensionScores {
+  return {
+    aiLiteracy: toFiniteScore(source?.aiLiteracy),
+    dataReadiness: toFiniteScore(source?.dataReadiness),
+    aiStrategy: toFiniteScore(source?.aiStrategy),
+    workflowAdoption: toFiniteScore(source?.workflowAdoption),
+    ethicsCompliance: toFiniteScore(source?.ethicsCompliance)
+  };
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -799,14 +814,16 @@ export async function buildRespondentReportData(params: {
   submissionId?: string;
 }): Promise<RespondentReportData> {
   const { organisationId, submission } = await resolveRespondentSubmission(params);
-  const readinessLevel = getReadinessLevel(submission.totalScore);
-  const readinessDescription = getReadinessDescription(submission.totalScore).replace(
+  const dimensionScores = normalizeDimensionScores(submission.dimensionScores);
+  const totalScore = toFiniteScore(submission.totalScore);
+  const readinessLevel = getReadinessLevel(totalScore);
+  const readinessDescription = getReadinessDescription(totalScore).replace(
     /\[Organisation Name\]/g,
     submission.orgName
   );
   const dimensionInsights = buildDimensionInsights({
-    ...submission.dimensionScores,
-    total: submission.totalScore
+    ...dimensionScores,
+    total: totalScore
   });
   const strongestDimension = [...dimensionInsights].sort(
     (left, right) => right.score - left.score
@@ -827,7 +844,7 @@ export async function buildRespondentReportData(params: {
     respondentDept: submission.respondentDept,
     submittedAt: submission.submittedAt.toISOString(),
     generatedAt: new Date().toISOString(),
-    totalScore: submission.totalScore,
+    totalScore,
     readinessLevel,
     readinessDescription,
     personalSummary: buildRespondentPersonalSummary({
@@ -836,7 +853,7 @@ export async function buildRespondentReportData(params: {
       strongestDimension,
       weakestDimension
     }),
-    dimensionScores: submission.dimensionScores,
+    dimensionScores,
     dimensionInsights,
     strongestDimension,
     weakestDimension,

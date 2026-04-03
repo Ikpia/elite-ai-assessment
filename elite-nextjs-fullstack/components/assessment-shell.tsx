@@ -2344,10 +2344,10 @@ export function AssessmentShell() {
         <div className="absolute right-[-12%] top-[10%] h-[28rem] w-[28rem] rounded-full bg-blue-100/50 blur-3xl md:h-[34rem] md:w-[34rem]" />
         <div className="relative z-10 mx-auto max-w-[min(98vw,1500px)] px-4 pb-12 sm:px-6 lg:px-8">
           <div className="grid min-h-[calc(100vh-8rem)] items-center gap-10 lg:grid-cols-[1fr_1fr] lg:gap-8">
-            <div className="flex max-w-[46rem] flex-col items-center justify-center text-center">
-              <h1 className="font-serif text-[2rem] font-medium leading-[0.98] text-stone-900 sm:text-[2.95rem] md:text-[3.9rem] lg:text-[4.65rem] lg:leading-[0.92]">
+            <div className="flex max-w-[46rem] flex-col items-center justify-center text-center sm:-translate-y-3 md:-translate-y-5 lg:-translate-y-7">
+              <h1 className="font-serif text-[1.85rem] font-medium leading-[1] text-stone-900 sm:text-[2.65rem] md:text-[3.45rem] lg:text-[4.1rem] lg:leading-[0.94]">
                 Your Organisation&apos;s AI Capability Gap <br />
-                <span className="mt-3 block text-[1.08rem] font-normal italic leading-[1.08] text-stone-600 sm:mt-4 sm:text-[1.6rem] md:text-[2.3rem] lg:text-[2.5rem]">
+                <span className="mt-3 block text-[0.98rem] font-normal italic leading-[1.1] text-stone-600 sm:mt-4 sm:text-[1.4rem] md:text-[2rem] lg:text-[2.2rem]">
                   Is Costing You More Than You Know.
                 </span>
               </h1>
@@ -2379,20 +2379,9 @@ export function AssessmentShell() {
                 >
                   Measure Your Organisation&apos;s AI Readiness
                 </motion.button>
-                <button
-                  onClick={() => openLandingSection("science")}
-                  className="rounded-full border border-stone-200 bg-white/85 px-6 py-3 text-stone-800 shadow-sm transition-colors hover:border-stone-300 sm:w-auto"
-                >
-                  See How It Works
-                </button>
               </div>
-              <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-stone-500">
-                Trusted by organisations in financial services, consulting, and healthcare
-                across Africa and global markets.
-              </p>
               <div className="mt-12 flex justify-center">
                 <a href="#introduction" onClick={goToSection("introduction")} className="group flex flex-col items-center gap-2 text-sm font-medium text-stone-500">
-                  <span>SEE WHAT FOLLOWS</span>
                   <span className="rounded-full border border-stone-300 bg-white/50 p-2">
                     <ArrowDown size={16} />
                   </span>
@@ -2400,7 +2389,7 @@ export function AssessmentShell() {
               </div>
             </div>
 
-            <div className="relative mx-auto -mt-20 h-[280px] w-full max-w-[420px] sm:-mt-28 sm:h-[430px] sm:max-w-[640px] md:-mt-36 lg:-mt-48 lg:h-[640px] lg:max-w-none">
+            <div className="relative mx-auto -mt-8 h-[280px] w-full max-w-[420px] sm:-mt-14 sm:h-[430px] sm:max-w-[640px] md:-mt-20 lg:-mt-28 lg:h-[640px] lg:max-w-none">
               <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(191,219,254,0.7),rgba(255,255,255,0)_68%)] blur-3xl" />
               <SpinningGlobeScene className="relative h-full w-full" />
             </div>
