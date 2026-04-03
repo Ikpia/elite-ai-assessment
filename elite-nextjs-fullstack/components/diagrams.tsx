@@ -5,88 +5,310 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Activity, Cpu, BarChart2 } from 'lucide-react';
+import { Cpu, BarChart2 } from 'lucide-react';
+import { DIMENSION_LABELS } from '@/lib/shared/questions';
+
+const PENTAGON_DIMENSIONS = [
+  { key: 'aiLiteracy', shortLabel: 'Literacy' },
+  { key: 'dataReadiness', shortLabel: 'Data' },
+  { key: 'aiStrategy', shortLabel: 'Process' },
+  { key: 'workflowAdoption', shortLabel: 'Leadership' },
+  { key: 'ethicsCompliance', shortLabel: 'Risk' }
+] as const;
+
+const PENTAGON_SIZE = 220;
+const PENTAGON_CENTER = PENTAGON_SIZE / 2;
+const PENTAGON_RADIUS = 76;
+const PENTAGON_MAX_SCORE = 20;
+const PENTAGON_LEVELS = [0.25, 0.5, 0.75, 1];
+
+function clampValue(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function polarToCartesian(index: number, radius: number): { x: number; y: number } {
+  const angle = ((-90 + index * (360 / PENTAGON_DIMENSIONS.length)) * Math.PI) / 180;
+
+  return {
+    x: PENTAGON_CENTER + radius * Math.cos(angle),
+    y: PENTAGON_CENTER + radius * Math.sin(angle)
+  };
+}
+
+function buildPolygonPath(points: Array<{ x: number; y: number }>): string {
+  if (!points.length) {
+    return '';
+  }
+
+  const [firstPoint, ...remainingPoints] = points;
+  return [
+    `M ${firstPoint.x.toFixed(2)} ${firstPoint.y.toFixed(2)}`,
+    ...remainingPoints.map((point) => `L ${point.x.toFixed(2)} ${point.y.toFixed(2)}`),
+    'Z'
+  ].join(' ');
+}
+
+function buildPentagonPath(values: number[]): string {
+  return buildPolygonPath(
+    values.map((value, index) =>
+      polarToCartesian(
+        index,
+        (clampValue(value, 0, PENTAGON_MAX_SCORE) / PENTAGON_MAX_SCORE) * PENTAGON_RADIUS
+      )
+    )
+  );
+}
+
+function getLabelAnchor(x: number): 'start' | 'middle' | 'end' {
+  if (x < PENTAGON_CENTER - 10) {
+    return 'end';
+  }
+
+  if (x > PENTAGON_CENTER + 10) {
+    return 'start';
+  }
+
+  return 'middle';
+}
+
+function getLabelOffsetX(x: number): number {
+  if (x < PENTAGON_CENTER - 10) {
+    return -8;
+  }
+
+  if (x > PENTAGON_CENTER + 10) {
+    return 8;
+  }
+
+  return 0;
+}
+
+function getLabelOffsetY(y: number): number {
+  if (y < PENTAGON_CENTER - 10) {
+    return -8;
+  }
+
+  if (y > PENTAGON_CENTER + 10) {
+    return 13;
+  }
+
+  return 4;
+}
 
 export const SurfaceCodeDiagram: React.FC = () => {
-  const [errors, setErrors] = useState<number[]>([]);
+  const [activeGaps, setActiveGaps] = useState<number[]>([]);
 
-  const adjacency: Record<number, number[]> = {
-    0: [0, 1],
-    1: [0, 2],
-    2: [1, 3],
-    3: [2, 3],
-    4: [0, 1, 2, 3],
+  const toggleGap = (index: number) => {
+    setActiveGaps((previous) =>
+      previous.includes(index)
+        ? previous.filter((item) => item !== index)
+        : [...previous, index].sort((left, right) => left - right)
+    );
   };
 
-  const toggleError = (id: number) => {
-    setErrors(prev => prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]);
-  };
+  const { dimensionScores, simulatedReadiness } = useMemo(() => {
+    const gapCount = activeGaps.length;
+    const scores = PENTAGON_DIMENSIONS.map((_, index) => {
+      const hasDirectGap = activeGaps.includes(index);
+      const hasLeftSpillover = activeGaps.includes(
+        (index + PENTAGON_DIMENSIONS.length - 1) % PENTAGON_DIMENSIONS.length
+      );
+      const hasRightSpillover = activeGaps.includes((index + 1) % PENTAGON_DIMENSIONS.length);
+      const spilloverPressure = Number(hasLeftSpillover) + Number(hasRightSpillover);
+      const systemicPressure = gapCount >= 4 ? 2 : gapCount >= 2 ? 1 : 0;
 
-  const activeStabilizers = [0, 1, 2, 3].filter(stabId => {
-    let errorCount = 0;
-    Object.entries(adjacency).forEach(([dataId, stabs]) => {
-      if (errors.includes(parseInt(dataId)) && stabs.includes(stabId)) {
-        errorCount++;
-      }
+      return clampValue(
+        18 - (hasDirectGap ? 7 : 0) - spilloverPressure - systemicPressure,
+        4,
+        PENTAGON_MAX_SCORE
+      );
     });
-    return errorCount % 2 !== 0;
-  });
+
+    return {
+      dimensionScores: scores,
+      simulatedReadiness: Math.round(
+        (scores.reduce((total, value) => total + value, 0) /
+          (PENTAGON_DIMENSIONS.length * PENTAGON_MAX_SCORE)) *
+          100
+      )
+    };
+  }, [activeGaps]);
+
+  const axisPoints = PENTAGON_DIMENSIONS.map((_, index) => polarToCartesian(index, PENTAGON_RADIUS));
+  const labelPoints = PENTAGON_DIMENSIONS.map((_, index) => polarToCartesian(index, PENTAGON_RADIUS + 26));
+  const scorePoints = dimensionScores.map((value, index) =>
+    polarToCartesian(index, (value / PENTAGON_MAX_SCORE) * PENTAGON_RADIUS)
+  );
+  const pentagonPath = buildPentagonPath(dimensionScores);
+  const activeGapSet = new Set(activeGaps);
 
   return (
-    <div className="flex flex-col items-center p-8 bg-white rounded-xl shadow-sm border border-stone-200 my-8">
-      <h3 className="font-serif text-xl mb-4 text-stone-800">Interactive: Capability Signal Map</h3>
-      <p className="text-sm text-stone-500 mb-6 text-center max-w-md">
-        Click the grey capability nodes to simulate gaps. The surrounding indicators light up as the platform surfaces pressure across <strong>leadership</strong>, <strong>data</strong>, <strong>workflow</strong>, and <strong>risk</strong>.
+    <div className="my-8 flex w-full flex-col items-center rounded-[28px] border border-stone-200 bg-white p-6 shadow-sm sm:p-8">
+      <h3 className="mb-4 text-center font-serif text-xl text-stone-800">Interactive: Capability Signal Map</h3>
+      <p className="mb-6 max-w-2xl text-center text-sm text-stone-500">
+        Select a readiness dimension to simulate pressure. The pentagon contracts as capability weakens across <strong>literacy</strong>, <strong>data</strong>, <strong>process</strong>, <strong>leadership</strong>, and <strong>risk</strong>.
       </p>
 
-      <div className="relative w-64 h-64 bg-[#F2F7FF] rounded-lg border border-blue-100 p-4 flex flex-wrap justify-between content-between relative">
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-20">
-          <div className="w-2/3 h-2/3 border border-stone-400"></div>
-          <div className="absolute w-full h-[1px] bg-stone-400"></div>
-          <div className="absolute h-full w-[1px] bg-stone-400"></div>
+      <div className="mt-8 w-full max-w-[38rem] rounded-[24px] border border-blue-100 bg-[#F6FAFF] p-5 shadow-[0_16px_42px_rgba(37,99,235,0.08)]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
+              Pentagon Data View
+            </p>
+            <h4 className="mt-1 font-serif text-lg text-stone-800">
+              Simulated readiness across five dimensions
+            </h4>
+          </div>
+          <div className="rounded-full border border-blue-200 bg-white/90 px-3 py-1 text-[11px] font-semibold text-blue-800 shadow-sm">
+            Profile {simulatedReadiness}/100
+          </div>
         </div>
 
-        {[
-          {id: 0, x: '50%', y: '20%', type: 'L', color: 'bg-blue-500'},
-          {id: 1, x: '20%', y: '50%', type: 'D', color: 'bg-sky-500'},
-          {id: 2, x: '80%', y: '50%', type: 'W', color: 'bg-sky-500'},
-          {id: 3, x: '50%', y: '80%', type: 'R', color: 'bg-blue-500'},
-        ].map(signal => (
-          <motion.div
-            key={`signal-${signal.id}`}
-            className={`absolute w-10 h-10 -ml-5 -mt-5 flex items-center justify-center text-white text-xs font-bold rounded-sm shadow-sm transition-all duration-300 ${activeStabilizers.includes(signal.id) ? signal.color + ' opacity-100 scale-110 ring-4 ring-offset-2 ring-stone-200' : 'bg-stone-300 opacity-40'}`}
-            style={{ left: signal.x, top: signal.y }}
-          >
-            {signal.type}
-          </motion.div>
-        ))}
+        <p className="mt-2 text-[12px] leading-5 text-slate-500">
+          Click any dimension card to simulate a gap and watch the readiness shape respond.
+        </p>
 
-        {[
-          {id: 0, x: '20%', y: '20%'}, {id: 1, x: '80%', y: '20%'},
-          {id: 4, x: '50%', y: '50%'},
-          {id: 2, x: '20%', y: '80%'}, {id: 3, x: '80%', y: '80%'},
-        ].map(node => (
-          <button
-            key={`node-${node.id}`}
-            onClick={() => toggleError(node.id)}
-            className={`absolute w-8 h-8 -ml-4 -mt-4 rounded-full border-2 flex items-center justify-center transition-all duration-200 z-10 ${errors.includes(node.id) ? 'bg-blue-900 border-blue-950 text-blue-100' : 'bg-white border-stone-300 hover:border-blue-400'}`}
-            style={{ left: node.x, top: node.y }}
-          >
-            {errors.includes(node.id) && <Activity size={14} />}
-          </button>
-        ))}
-      </div>
+        <div className="mt-5 grid gap-6 md:grid-cols-[220px_minmax(0,1fr)] md:items-center">
+          <div className="mx-auto h-[220px] w-[220px]">
+            <svg width={PENTAGON_SIZE} height={PENTAGON_SIZE} viewBox={`0 0 ${PENTAGON_SIZE} ${PENTAGON_SIZE}`} className="overflow-visible">
+              <defs>
+                <linearGradient id="capability-pentagon-fill" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#2563EB" stopOpacity="0.28" />
+                  <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.1" />
+                </linearGradient>
+              </defs>
 
-      <div className="mt-6 flex items-center gap-4 text-xs font-mono text-stone-500">
-        <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-900"></div> Gap</div>
-        <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-blue-500"></div> Leadership / Risk</div>
-        <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-sky-500"></div> Data / Workflow</div>
+              {PENTAGON_LEVELS.map((level) => (
+                <path
+                  key={`level-${level}`}
+                  d={buildPolygonPath(
+                    PENTAGON_DIMENSIONS.map((_, index) => polarToCartesian(index, PENTAGON_RADIUS * level))
+                  )}
+                  fill="none"
+                  stroke="#BFDBFE"
+                  strokeWidth="1"
+                />
+              ))}
+
+              {axisPoints.map((point, index) => (
+                <g key={`axis-${index}`}>
+                  <line
+                    x1={PENTAGON_CENTER}
+                    y1={PENTAGON_CENTER}
+                    x2={point.x}
+                    y2={point.y}
+                    stroke="#CBD5E1"
+                    strokeWidth="1"
+                  />
+                  <circle
+                    cx={point.x}
+                    cy={point.y}
+                    r="8"
+                    fill={activeGapSet.has(index) ? '#1D4ED8' : '#FFFFFF'}
+                    stroke={activeGapSet.has(index) ? '#1D4ED8' : '#93C5FD'}
+                    strokeWidth="2"
+                  />
+                </g>
+              ))}
+
+              <motion.path
+                d={pentagonPath}
+                animate={{ d: pentagonPath }}
+                transition={{ type: 'spring', stiffness: 140, damping: 18 }}
+                fill="url(#capability-pentagon-fill)"
+                stroke="#2563EB"
+                strokeWidth="2.5"
+              />
+
+              {scorePoints.map((point, index) => (
+                <circle
+                  key={`point-${index}`}
+                  cx={point.x}
+                  cy={point.y}
+                  r="4.5"
+                  fill="#2563EB"
+                  stroke="#FFFFFF"
+                  strokeWidth="2"
+                />
+              ))}
+
+              {labelPoints.map((point, index) => (
+                <text
+                  key={`label-${PENTAGON_DIMENSIONS[index].key}`}
+                  x={point.x + getLabelOffsetX(point.x)}
+                  y={point.y + getLabelOffsetY(point.y)}
+                  textAnchor={getLabelAnchor(point.x)}
+                  fontSize="10"
+                  fontWeight="700"
+                  fill="#475569"
+                >
+                  {PENTAGON_DIMENSIONS[index].shortLabel}
+                </text>
+              ))}
+            </svg>
+          </div>
+
+          <div className="space-y-3">
+            {PENTAGON_DIMENSIONS.map((dimension, index) => {
+              const score = dimensionScores[index];
+              const isActive = activeGapSet.has(index);
+
+              return (
+                <button
+                  key={dimension.key}
+                  type="button"
+                  onClick={() => toggleGap(index)}
+                  className={`w-full rounded-2xl border p-3 text-left shadow-sm transition-colors ${
+                    isActive
+                      ? 'border-blue-300 bg-blue-50/90'
+                      : 'border-white/70 bg-white/85 hover:border-blue-200 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[13px] font-semibold leading-5 text-slate-700">
+                        {DIMENSION_LABELS[dimension.key]}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {isActive ? 'Gap simulated' : 'Click to simulate gap'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0 font-mono text-[11px] font-semibold text-slate-500">
+                        {score}/20
+                      </span>
+                      <span
+                        className={`flex h-6 w-6 items-center justify-center rounded-full border text-sm font-semibold ${
+                          isActive
+                            ? 'border-blue-300 bg-blue-600 text-white'
+                            : 'border-slate-200 bg-white text-slate-500'
+                        }`}
+                      >
+                        {isActive ? '-' : '+'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-blue-100">
+                    <motion.div
+                      className="h-full rounded-full bg-gradient-to-r from-blue-600 via-blue-500 to-sky-400"
+                      initial={false}
+                      animate={{ width: `${(score / PENTAGON_MAX_SCORE) * 100}%` }}
+                      transition={{ type: 'spring', stiffness: 150, damping: 20 }}
+                    />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <div className="mt-4 h-6 text-sm font-serif italic text-stone-600">
-        {errors.length === 0 ? "No critical capability gaps selected." : `The platform has surfaced ${activeStabilizers.length} connected risk signals.`}
+        {activeGaps.length === 0
+          ? 'No critical capability gaps selected.'
+          : `The simulated pentagon has contracted across ${activeGaps.length} selected dimension${activeGaps.length === 1 ? '' : 's'}.`}
       </div>
     </div>
   );

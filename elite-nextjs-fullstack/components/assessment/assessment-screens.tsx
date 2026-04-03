@@ -484,7 +484,7 @@ export function AssessmentSplitEntryScreen({
     <AssessmentModal
       eyebrow="Assessment Entry"
       title="Welcome! Please Choose your path"
-      description="Stay in this modal and continue."
+      description="Choose a path."
       onClose={onClose}
       widthClass="max-w-5xl"
       animationKey="assessment-entry"
@@ -506,14 +506,14 @@ export function AssessmentSplitEntryScreen({
             I’m taking the assessment.
           </h2>
           <p className="mt-4 text-sm leading-6 text-slate-600">
-            Answer the questions and get your live report link.
+            Answer questions. Get your report.
           </p>
           <button
             type="button"
             onClick={onSelectRespondent}
             className={`${primaryButtonClasses} mt-6`}
           >
-            Continue as Respondent
+            Take assessment
             <ArrowRight className="h-4 w-4" />
           </button>
         </motion.div>
@@ -529,14 +529,14 @@ export function AssessmentSplitEntryScreen({
             I’m setting this up for my team.
           </h2>
           <p className="mt-4 text-sm leading-6 text-slate-200">
-            Create the firm and get the team invite link.
+            Create the firm. Get the invite link.
           </p>
           <button
             type="button"
             onClick={onSelectDirector}
             className="mt-6 inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white px-5 py-3 text-sm font-bold text-slate-950"
           >
-            Continue as Director
+            Set up team
             <ArrowRight className="h-4 w-4" />
           </button>
         </motion.div>
@@ -581,8 +581,8 @@ export function AssessmentWelcomeScreen({
   return (
     <AssessmentModal
       eyebrow={isInviteFlow ? "Team Invite" : "Respondent"}
-      title="Start the assessment"
-      description="Add your organisation context to continue."
+      title="Start assessment"
+      description={isInviteFlow ? "Check your organisation details." : "Add your organisation."}
       onClose={onClose}
       widthClass="max-w-3xl"
       animationKey={isInviteFlow ? "respondent-entry-invite" : "respondent-entry"}
@@ -599,7 +599,7 @@ export function AssessmentWelcomeScreen({
             className={`${primaryButtonClasses} sm:flex-1`}
           >
             {entryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          className="space-y-4"
+            Continue
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>
@@ -615,7 +615,7 @@ export function AssessmentWelcomeScreen({
       >
         {isInviteFlow ? (
           <motion.div variants={fadeUpItem} className="flex flex-wrap gap-2">
-            <span className={chipClasses}>Invite prefilled</span>
+            <span className={chipClasses}>Prefilled</span>
           </motion.div>
         ) : null}
 
@@ -642,11 +642,11 @@ export function AssessmentWelcomeScreen({
 
           <div className="space-y-2 sm:col-span-2">
             <label className="ml-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
-              Organisation Name
+              Organisation
             </label>
             <input
               type="text"
-              placeholder="Your organisation"
+              placeholder="Organisation"
               value={formData.orgName}
               onChange={(event) => onOrgNameChange(event.target.value)}
               disabled={Boolean(invitePrefill)}
@@ -660,7 +660,7 @@ export function AssessmentWelcomeScreen({
         {inviteLoading ? (
           <motion.div variants={fadeUpItem} className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading invitation...
+            Loading...
           </motion.div>
         ) : null}
 

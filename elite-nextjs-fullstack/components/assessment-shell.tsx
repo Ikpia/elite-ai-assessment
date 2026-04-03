@@ -166,9 +166,9 @@ const EMPTY_CREATE_ORG_DRAFT: CreateOrganisationDraft = {
 };
 
 const ADMIN_NOTES = [
-  "Elite Global AI admins can onboard each firm by assigning its admin email and organisation details.",
-  "Firm admins only see their own organisation dashboard, reports, and readiness data.",
-  "Generate and send the PDF report only when you are satisfied with the aggregate data."
+  "Create or confirm the organisation record and assign the right admin email.",
+  "Organisation admins only see their own readiness data, reports, and actions.",
+  "Send the final report only when the aggregate picture is ready to share."
 ];
 
 const isDirectorOnboardingFlow = false;
@@ -1249,6 +1249,12 @@ export function AssessmentShell() {
     navigate("/start");
   };
 
+  const openTeamConversation = () => {
+    setEntryError("");
+    setEntryNotice("");
+    navigate("/director-setup");
+  };
+
   function navigate(path: string, replace = false) {
     if (typeof window === "undefined") {
       return;
@@ -1281,6 +1287,18 @@ export function AssessmentShell() {
 
   const goToSection = (id: string) => (event: React.MouseEvent) => {
     event.preventDefault();
+    setMenuOpen(false);
+
+    if (route.name !== "landing") {
+      navigate("/");
+      window.setTimeout(() => scrollToSection(id), 120);
+      return;
+    }
+
+    scrollToSection(id);
+  };
+
+  const openLandingSection = (id: string) => {
     setMenuOpen(false);
 
     if (route.name !== "landing") {
@@ -2120,28 +2138,59 @@ export function AssessmentShell() {
     }
   ].filter((item) => !isPrimaryRouteActive(item.key));
 
+  const landingNavItems = [
+    {
+      label: "Organisations",
+      description: "See the capability gap, business risk, and organisational readiness case.",
+      action: () => openLandingSection("introduction")
+    },
+    {
+      label: "Professionals",
+      description: "Take the free assessment and understand where your team stands now.",
+      action: openAssessmentEntry
+    },
+    {
+      label: "Method",
+      description: "Understand how Elite Global AI measures, develops, and proves readiness.",
+      action: () => openLandingSection("science")
+    },
+    {
+      label: "Team",
+      description: "Meet the practitioner-led team behind the assessment and capability model.",
+      action: () => openLandingSection("authors")
+    },
+    {
+      label: "Insights",
+      description: "Review live benchmark data and public readiness signals.",
+      action: () => navigate("/dashboard")
+    }
+  ];
+
   const renderTopNav = () => {
     const sharedButtonClasses =
       "rounded-full bg-stone-900 px-5 py-2 text-white shadow-sm transition-colors hover:bg-stone-800";
+    const ghostButtonClasses =
+      "rounded-full border border-stone-200 bg-white/85 px-5 py-2 text-stone-700 shadow-sm transition-colors hover:border-stone-300";
 
     if (isLandingSurface) {
       return (
         <>
-          <div className="hidden items-center gap-8 text-sm font-medium tracking-wide text-stone-600 md:flex">
-            <a href="#introduction" onClick={goToSection("introduction")} className="cursor-pointer uppercase">
-              Overview
-            </a>
-            <a href="#science" onClick={goToSection("science")} className="cursor-pointer uppercase">
-              Assessment
-            </a>
-            <a href="#authors" onClick={goToSection("authors")} className="cursor-pointer uppercase">
-              Users
-            </a>
-            <button onClick={() => navigate("/dashboard")} className="uppercase">
-              Dashboard
+          <div className="hidden items-center gap-4 text-sm font-medium tracking-wide text-stone-600 md:flex">
+            {landingNavItems.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={item.action}
+                className="whitespace-nowrap uppercase"
+              >
+                {item.label}
+              </button>
+            ))}
+            <button type="button" onClick={openAssessmentEntry} className={ghostButtonClasses}>
+              Take the Free Assessment
             </button>
-            <button onClick={openAssessmentEntry} className={sharedButtonClasses}>
-              Start Assessment
+            <button type="button" onClick={openTeamConversation} className={sharedButtonClasses}>
+              Speak With Our Team
             </button>
           </div>
           <button className="p-2 md:hidden" onClick={() => setMenuOpen((current) => !current)}>
@@ -2206,6 +2255,8 @@ export function AssessmentShell() {
       return null;
     }
 
+    const menuItems = isLandingSurface ? landingNavItems : primaryNavItems;
+
     return (
       <div className="fixed inset-0 z-40 bg-[#F9F8F4]/96 px-5 pb-8 pt-24 backdrop-blur-md">
         <div className="mx-auto flex max-w-md flex-col gap-5">
@@ -2214,7 +2265,7 @@ export function AssessmentShell() {
               <p className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-stone-400">
                 Navigation
               </p>
-              <p className="mt-2 font-serif text-2xl text-stone-900">Explore the platform</p>
+              <p className="mt-2 font-serif text-2xl text-stone-900">Explore Elite Global AI</p>
             </div>
             <button
               type="button"
@@ -2227,9 +2278,9 @@ export function AssessmentShell() {
           </div>
 
           <div className="grid gap-3">
-            {primaryNavItems.map((item) => (
+            {menuItems.map((item) => (
               <button
-                key={item.key}
+                key={item.label}
                 type="button"
                 onClick={() => {
                   setMenuOpen(false);
@@ -2242,6 +2293,31 @@ export function AssessmentShell() {
               </button>
             ))}
           </div>
+
+          {isLandingSurface ? (
+            <div className="grid gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  openAssessmentEntry();
+                }}
+                className="rounded-full border border-stone-200 bg-white px-5 py-3 text-sm font-semibold text-stone-700 shadow-sm"
+              >
+                Take the Free Assessment
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  openTeamConversation();
+                }}
+                className="rounded-full bg-stone-900 px-5 py-3 text-sm font-semibold text-white shadow-sm"
+              >
+                Speak With Our Team
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     );
@@ -2255,15 +2331,15 @@ export function AssessmentShell() {
         <div className="relative z-10 mx-auto max-w-[min(98vw,1500px)] px-4 pb-12 sm:px-6 lg:px-8">
           <div className="grid min-h-[calc(100vh-8rem)] items-center gap-10 lg:grid-cols-[1fr_1fr] lg:gap-8">
             <div className="flex max-w-[46rem] flex-col items-center justify-center text-center">
-              <h1 className="font-serif text-[2.9rem] font-medium leading-[0.95] text-stone-900 sm:text-5xl md:text-7xl lg:text-[5.8rem] lg:leading-[0.9]">
-                Elite Global AI <br />
-                <span className="mt-4 block text-[1.8rem] font-normal italic text-stone-600 sm:text-3xl md:text-5xl">
-                  AI Readiness Assessment Platform
+              <h1 className="font-serif text-[2rem] font-medium leading-[0.98] text-stone-900 sm:text-[2.95rem] md:text-[3.9rem] lg:text-[4.65rem] lg:leading-[0.92]">
+                Your Organisation&apos;s AI Capability Gap <br />
+                <span className="mt-3 block text-[1.08rem] font-normal italic leading-[1.08] text-stone-600 sm:mt-4 sm:text-[1.6rem] md:text-[2.3rem] lg:text-[2.5rem]">
+                  Is Costing You More Than You Know.
                 </span>
               </h1>
               <p className="mx-auto mt-6 max-w-2xl text-base font-light leading-8 text-stone-700 sm:mt-8 sm:text-lg md:text-xl">
-                A B2B assessment experience for benchmarking organisational AI readiness across
-                literacy, data readiness, strategy, workflow adoption, and governance.
+                Elite Global AI measures where your team stands, closes the gap in 30 days,
+                and proves every point of improvement.
               </p>
               <div className="mt-8 flex w-full flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
                 <motion.button
@@ -2287,18 +2363,22 @@ export function AssessmentShell() {
                   whileTap={{ scale: 0.98 }}
                   className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 px-8 py-4 text-[1.05rem] font-extrabold text-white shadow-[0_18px_44px_rgba(37,99,235,0.22)] ring-1 ring-blue-300/50 transition-transform sm:w-auto sm:px-10 sm:py-4 sm:text-[1.12rem]"
                 >
-                  Begin Assessment
+                  Measure Your Organisation&apos;s AI Readiness
                 </motion.button>
                 <button
-                  onClick={() => navigate("/dashboard")}
+                  onClick={() => openLandingSection("science")}
                   className="rounded-full border border-stone-200 bg-white/85 px-6 py-3 text-stone-800 shadow-sm transition-colors hover:border-stone-300 sm:w-auto"
                 >
-                  View Dashboard
+                  See How It Works
                 </button>
               </div>
+              <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-stone-500">
+                Trusted by organisations in financial services, consulting, and healthcare
+                across Africa and global markets.
+              </p>
               <div className="mt-12 flex justify-center">
                 <a href="#introduction" onClick={goToSection("introduction")} className="group flex flex-col items-center gap-2 text-sm font-medium text-stone-500">
-                  <span>DISCOVER</span>
+                  <span>SEE WHAT FOLLOWS</span>
                   <span className="rounded-full border border-stone-300 bg-white/50 p-2">
                     <ArrowDown size={16} />
                   </span>
@@ -2306,7 +2386,7 @@ export function AssessmentShell() {
               </div>
             </div>
 
-            <div className="relative mx-auto -mt-6 h-[280px] w-full max-w-[420px] sm:-mt-12 sm:h-[430px] sm:max-w-[640px] lg:-mt-20 lg:h-[640px] lg:max-w-none">
+            <div className="relative mx-auto -mt-20 h-[280px] w-full max-w-[420px] sm:-mt-28 sm:h-[430px] sm:max-w-[640px] md:-mt-36 lg:-mt-48 lg:h-[640px] lg:max-w-none">
               <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(191,219,254,0.7),rgba(255,255,255,0)_68%)] blur-3xl" />
               <SpinningGlobeScene className="relative h-full w-full" />
             </div>
@@ -2315,29 +2395,31 @@ export function AssessmentShell() {
       </header>
 
       <main>
-        <section id="introduction" className="bg-white py-20 sm:py-24">
-          <div className="container mx-auto grid grid-cols-1 items-start gap-10 px-5 sm:px-6 md:grid-cols-12 md:px-12">
+        <section id="introduction" className="bg-white py-12 sm:py-14 lg:py-16">
+          <div className="container mx-auto grid grid-cols-1 items-start gap-8 px-5 sm:px-6 md:grid-cols-12 md:px-12 lg:gap-10">
             <div className="md:col-span-4">
               <div className="mb-3 inline-block text-xs font-bold uppercase tracking-widest text-stone-500">
-                Overview
+                For Organisations
               </div>
-              <h2 className="mb-6 font-serif text-4xl leading-tight text-stone-900">
-                The Competitive Readiness Gap
+              <h2 className="mb-4 font-serif text-4xl leading-tight text-stone-900">
+                Most Organisations Are Investing in AI Tools Their Teams Cannot Use Effectively.
               </h2>
-              <div className="mb-6 h-1 w-16 bg-nobel-gold" />
+              <div className="h-1 w-16 bg-nobel-gold" />
             </div>
             <div className="space-y-6 text-lg leading-relaxed text-stone-600 md:col-span-8">
               <p>
                 <span className="float-left mr-3 mt-[-8px] font-serif text-5xl text-nobel-gold">
                   T
                 </span>
-                he Elite Global AI Readiness Assessment helps organisations benchmark how
-                prepared their teams are for AI adoption by collecting 5 to 20 structured
-                responses, aggregating the results, and turning a typical{" "}
-                <strong className="font-medium text-stone-900">31 out of 100</strong> versus{" "}
-                <strong className="font-medium text-stone-900">68 out of 100</strong>{" "}
-                benchmark gap into a clear executive view of speed, governance, and
-                competitive risk.
+                he challenge is not tool access. It is workforce capability.
+              </p>
+              <p>
+                Organisations are moving into AI faster than their teams can use, evaluate,
+                and govern it with confidence.
+              </p>
+              <p>
+                That gap shows up as stalled adoption, weak ROI, avoidable risk, and a
+                widening distance between AI-ready organisations and everyone else.
               </p>
             </div>
           </div>
@@ -2345,25 +2427,28 @@ export function AssessmentShell() {
 
         <section id="science" className="border-t border-stone-100 bg-white py-20 sm:py-24">
           <div className="container mx-auto px-5 sm:px-6">
-            <div className="grid grid-cols-1 items-center gap-16 lg:grid-cols-2">
-              <div>
-                <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-xs font-bold uppercase tracking-widest text-stone-600">
-                  <BookOpen size={14} />
-                  THE MODEL
-                </div>
-                <h2 className="mb-6 font-serif text-4xl text-stone-900 md:text-5xl">
-                  Assessment Structure
-                </h2>
-                <p className="mb-6 text-lg leading-relaxed text-stone-600">
-                  The assessment uses <strong>25 scored questions</strong> across five
-                  dimensions, delivered one question per screen, while the backend keeps
-                  scoring server-side, aggregates answers at organisation level, and preserves
-                  anonymity in the final director-facing report.
+            <div className="mx-auto mb-12 max-w-4xl text-center">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-stone-200 bg-stone-100 px-3 py-1 text-xs font-bold uppercase tracking-widest text-stone-600">
+                <BookOpen size={14} />
+                OUR METHOD
+              </div>
+              <h2 className="mb-6 font-serif text-4xl text-stone-900 md:text-5xl">
+                Measure. Develop. Prove.
+              </h2>
+              <div className="mx-auto max-w-3xl space-y-4 text-lg leading-relaxed text-stone-600">
+                <p>
+                  We measure your organisation across five AI readiness dimensions in
+                  minutes, then target the exact gaps with practitioner-led programmes built
+                  for your context.
+                </p>
+                <p>
+                  Finally, we prove improvement with before-and-after data leadership can
+                  defend, report, and act on.
                 </p>
               </div>
-              <div>
-                <SurfaceCodeDiagram />
-              </div>
+            </div>
+            <div className="mx-auto max-w-4xl">
+              <SurfaceCodeDiagram />
             </div>
           </div>
         </section>
@@ -2371,13 +2456,16 @@ export function AssessmentShell() {
         <section className="bg-[#F9F8F4] py-20 sm:py-24">
           <div className="container mx-auto px-5 sm:px-6">
             <div className="mx-auto mb-12 max-w-4xl text-center">
+              <div className="mb-3 inline-block text-xs font-bold uppercase tracking-widest text-stone-500">
+                Insights
+              </div>
               <h2 className="mb-6 font-serif text-4xl text-stone-900 md:text-5xl">
-                Readiness Benchmarks
+                What AI Readiness Looks Like in Practice
               </h2>
               <p className="text-lg leading-relaxed text-stone-600">
-                Directors need more than a raw score. The reporting layer frames results
-                against benchmark ranges so leadership can understand whether the
-                organisation is AI unaware, exploring, developing, or proficient.
+                Leadership needs more than a score. The benchmark view shows current
+                position, target state, and what meaningful movement looks like across the
+                five dimensions.
               </p>
             </div>
             <div className="mx-auto max-w-3xl">
@@ -2390,22 +2478,24 @@ export function AssessmentShell() {
           <div className="container mx-auto px-5 sm:px-6">
             <div className="mb-16 text-center">
               <div className="mb-3 inline-block text-xs font-bold uppercase tracking-widest text-stone-500">
-                PLATFORM USERS
+                OUR TEAM
               </div>
               <h2 className="mb-4 font-serif text-3xl text-stone-900 md:text-5xl">
-                Who the Product Serves
+                Built by Practitioners. Not Theorists.
               </h2>
               <p className="mx-auto max-w-2xl text-stone-500">
-                Built for executive recipients, respondents, and the internal admin team
-                managing report delivery.
+                Elite Global AI combines enterprise AI delivery, governance, strategy,
+                learning design, and workforce transformation in one practitioner-led team.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-8">
-              <AuthorCard name="Financial Services" role="Banks, fintechs, insurance, and regulated financial operations" delay="0s" />
-              <AuthorCard name="Healthcare" role="Hospitals, health systems, NGOs, and clinical operations leaders" delay="0.1s" />
-              <AuthorCard name="Consulting Firms" role="Professional services teams across audit, legal, tax, and advisory" delay="0.2s" />
-              <AuthorCard name="SMEs" role="Growing businesses across operations, sales, customer service, and leadership" delay="0.3s" />
+              <AuthorCard name="Enterprise AI Operators" role="Builders who have deployed AI in high-accountability environments." delay="0s" />
+              <AuthorCard name="Strategy Leaders" role="Advisors who convert AI ambition into measurable capability." delay="0.1s" />
+              <AuthorCard name="Governance Specialists" role="Experts in responsible adoption, controls, and decision confidence." delay="0.2s" />
+              <AuthorCard name="Learning Architects" role="Designers who turn executive intent into workforce behaviour change." delay="0.3s" />
+              <AuthorCard name="Sector Advisors" role="Practitioner support for financial services, consulting, healthcare, and enterprise teams." delay="0.4s" />
+              <AuthorCard name="Measurement Analysts" role="Operators who document readiness movement and prove improvement." delay="0.5s" />
             </div>
           </div>
         </section>
@@ -2432,28 +2522,28 @@ export function AssessmentShell() {
       "absolute right-0 rounded-full border border-white/70 bg-[#dbe6f4]/95 px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-600 shadow-[0_10px_22px_rgba(15,23,42,0.08)] backdrop-blur-xl";
     const summaryCards = [
       {
-        label: "Firms Took the Test",
+        label: "Participating Firms",
         value: publicDashboard?.summary.participatingFirms ?? "—",
-        detail: "Organisations with at least one completed assessment."
+        detail: "Organisations currently represented in the benchmark."
       },
       {
-        label: "Average Scoring",
+        label: "Average Readiness",
         value: publicDashboard ? `${publicDashboard.summary.averageScore}/100` : "—",
-        detail: "Mean organisation score across all participating firms."
+        detail: "Mean organisation score across the live benchmark set."
       },
       {
         label: "Total Responses",
         value: publicDashboard?.summary.totalSubmissions ?? "—",
-        detail: "Submitted respondent records contributing to the public benchmark."
+        detail: "Submitted assessments informing the benchmark."
       },
       {
-        label: "Highest Firm Average",
+        label: "Highest Readiness",
         value:
           publicDashboard?.summary.highestAverageScore !== null &&
           publicDashboard?.summary.highestAverageScore !== undefined
             ? `${publicDashboard.summary.highestAverageScore}/100`
             : "—",
-        detail: "Current leading score across firms shown on this board."
+        detail: "Current top score across participating organisations."
       }
     ];
 
@@ -2477,7 +2567,7 @@ export function AssessmentShell() {
                   className={`${glassPillClasses} inline-flex items-center gap-2 px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-600`}
                 >
                   <BarChart3 className="h-3.5 w-3.5 text-blue-700" />
-                  Public Benchmark Dashboard
+                  Readiness Benchmark Board
                 </motion.div>
               </div>
 
@@ -2546,7 +2636,7 @@ export function AssessmentShell() {
             >
               <div className="flex items-center gap-3 font-serif text-xl text-slate-700">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                <span>Loading public dashboard...</span>
+                <span>Loading benchmark data...</span>
               </div>
             </motion.div>
           ) : null}
@@ -2563,10 +2653,10 @@ export function AssessmentShell() {
                   <div className="mb-6 flex items-start justify-between gap-4">
                     <div>
                       <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-400">
-                        Sector View
+                        Sector Benchmark
                       </p>
                       <h2 className="mt-2 font-serif text-[1.8rem] font-medium tracking-tight text-slate-950">
-                        Average scoring by firm type
+                        Average readiness by sector
                       </h2>
                     </div>
                     <span className={`${glassPillClasses} px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500`}>
@@ -2630,10 +2720,10 @@ export function AssessmentShell() {
                   <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-400">
-                        Lead Snapshot
+                        Leading Organisation
                       </p>
                       <h2 className="mt-2 font-serif text-[1.8rem] font-medium tracking-tight text-slate-950">
-                        Current benchmark leader
+                        Current readiness leader
                       </h2>
                     </div>
                     {topFirm ? (
@@ -2702,10 +2792,10 @@ export function AssessmentShell() {
                   ) : (
                     <div className={`${glassInsetClasses} flex min-h-[16rem] items-center justify-center rounded-[28px] border-dashed text-center`}>
                       <div className="max-w-md px-6">
-                        <p className="font-serif text-2xl text-slate-900">No participating firms yet</p>
+                        <p className="font-serif text-2xl text-slate-900">No benchmark leader yet</p>
                         <p className="mt-3 text-sm leading-7 text-slate-500">
-                          Once organisations complete the assessment, they will appear here
-                          with their average scoring and sector position.
+                          Once organisations begin submitting assessments, the leading score
+                          and sector position will appear here.
                         </p>
                       </div>
                     </div>
@@ -2725,12 +2815,11 @@ export function AssessmentShell() {
                       Benchmark Comparison
                     </p>
                     <h2 className="mt-2 font-serif text-[1.8rem] font-medium tracking-tight text-slate-950">
-                      Firm average scores vs global benchmark
+                      Organisation scores vs global benchmark
                     </h2>
                     <p className="mt-3 text-sm leading-6 text-slate-500">
-                      Each bar shows a firm&apos;s average readiness score. The reference
-                      lines show the live system-wide average and the global benchmark used
-                      in the reporting model.
+                      Each bar shows an organisation&apos;s average readiness score against the
+                      live average and the benchmark used in the reporting model.
                     </p>
                   </div>
 
@@ -2755,8 +2844,8 @@ export function AssessmentShell() {
                     <div className={`${glassCardClasses} overflow-hidden p-4 sm:p-6`}>
                       <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                         <p className="max-w-2xl text-sm leading-6 text-slate-500">
-                          The chart spreads all participating firms across one view and
-                          keeps the benchmark lines fixed for direct comparison.
+                          The chart keeps every organisation on one scale so benchmark gaps
+                          are visible immediately.
                         </p>
                         <div className="flex flex-wrap gap-2">
                           <span className={`${glassPillClasses} inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-600`}>
@@ -2987,10 +3076,10 @@ export function AssessmentShell() {
                 <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-slate-400">
-                      Participating Firms
+                      Participating Organisations
                     </p>
                     <h2 className="mt-2 font-serif text-[1.8rem] font-medium tracking-tight text-slate-950">
-                      Firms that took the test
+                      Organisations on the benchmark board
                     </h2>
                   </div>
                   <span className={`${glassPillClasses} px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500`}>
@@ -3062,10 +3151,10 @@ export function AssessmentShell() {
                 ) : (
                   <div className={`${glassInsetClasses} flex min-h-[14rem] items-center justify-center rounded-[28px] border-dashed text-center`}>
                     <div className="max-w-md px-6">
-                      <p className="font-serif text-2xl text-slate-900">No public results yet</p>
+                      <p className="font-serif text-2xl text-slate-900">No benchmark data yet</p>
                       <p className="mt-3 text-sm leading-7 text-slate-500">
-                        This space will populate automatically after organisations submit
-                        assessment responses.
+                        This board will populate automatically as organisations complete
+                        the assessment.
                       </p>
                     </div>
                   </div>
@@ -3253,21 +3342,21 @@ export function AssessmentShell() {
                     </div>
                     <div>
                       <p className="font-serif text-lg font-bold tracking-tight text-slate-950">
-                        Secure Admin Access
+                        Platform Console Access
                       </p>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                        Authentication required
+                        Restricted access
                       </p>
                     </div>
                   </div>
 
                   <div className="mb-5 space-y-2">
                     <h2 className="font-serif text-[1.42rem] font-medium text-slate-950 sm:text-[1.68rem]">
-                      Admin Login
+                      Access the admin console
                     </h2>
                     <p className="max-w-2xl text-[0.98rem] leading-7 text-slate-500 sm:text-[1.04rem]">
-                      Enter your admin email to access the correct admin dashboard. Firm
-                      admins only see their own organisation.
+                      Enter your admin email to open the right console. Organisation
+                      admins only see their own firm.
                     </p>
                   </div>
 
@@ -3278,8 +3367,7 @@ export function AssessmentShell() {
                           Admin Email
                         </p>
                         <p className="mt-2 text-sm leading-6 text-slate-500">
-                          The dashboard scope is determined immediately by the email you
-                          enter.
+                          Access scope is determined immediately by the email you enter.
                         </p>
                       </div>
 
@@ -3304,7 +3392,7 @@ export function AssessmentShell() {
                         className="mt-4 flex w-full items-center justify-center gap-3 rounded-full bg-blue-900 px-6 py-3 text-[15px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"
                       >
                         {adminLoginLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                        Access Dashboard
+                        Enter Console
                         <ArrowRight className="h-4 w-4" />
                       </button>
                     </div>
@@ -3321,7 +3409,7 @@ export function AssessmentShell() {
                 <aside className="space-y-4">
                   <div className="rounded-[24px] border border-blue-100 bg-blue-50/60 p-6">
                     <p className="mb-4 text-[10px] font-extrabold uppercase tracking-[0.22em] text-slate-500">
-                      Recommended Sequence
+                      Recommended Workflow
                     </p>
                     <div className="space-y-3">
                       {ADMIN_NOTES.map((note, index) => (
@@ -3350,12 +3438,12 @@ export function AssessmentShell() {
             <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">
-                  {isSuperAdmin ? "EliteGlobal Admin Dashboard" : "Firm Admin Dashboard"}
+                  {isSuperAdmin ? "Elite Global AI Console" : "Organisation Console"}
                 </p>
                 <h1 className="font-serif text-[1.62rem] font-medium leading-[1.04] tracking-[0.01em] text-slate-950 sm:text-[1.96rem] lg:text-[2.42rem]">
                   {isSuperAdmin
-                    ? "Organisation readiness overview"
-                    : "Your organisation readiness overview"}
+                    ? "Organisation readiness command centre"
+                    : "Your readiness command centre"}
                 </h1>
               </div>
               <div className="flex flex-wrap gap-3">
@@ -3363,7 +3451,7 @@ export function AssessmentShell() {
                   onClick={() => { void fetchOrgs(adminAuth); }}
                   className="inline-flex items-center gap-2 rounded-full border border-stone-200 px-5 py-3 text-[15px] font-semibold text-stone-700"
                 >
-                  Refresh
+                  Refresh Data
                 </button>
                 <button
                   onClick={handleLogout}
@@ -3376,10 +3464,10 @@ export function AssessmentShell() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <SummaryCard icon={Building2} label="Organisations" value={String(orgs.length)} />
-              <SummaryCard icon={Users} label="Submissions" value={String(totalSubmissions)} />
-              <SummaryCard icon={BarChart3} label="Average Score" value={averageScore.toFixed(1)} />
-              <SummaryCard icon={Send} label="Reports Sent" value={String(reportsSent)} />
+              <SummaryCard icon={Building2} label="Active Organisations" value={String(orgs.length)} />
+              <SummaryCard icon={Users} label="Captured Responses" value={String(totalSubmissions)} />
+              <SummaryCard icon={BarChart3} label="Average Readiness" value={averageScore.toFixed(1)} />
+              <SummaryCard icon={Send} label="Reports Delivered" value={String(reportsSent)} />
             </div>
 
             {adminNotice ? (
@@ -3399,15 +3487,15 @@ export function AssessmentShell() {
               <div className="mb-5 flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <p className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-400">
-                    Firm Admin Onboarding
+                    Organisation Onboarding
                   </p>
                   <h2 className="font-serif text-[1.35rem] font-medium tracking-[0.01em] text-slate-950 sm:text-[1.6rem]">
-                    Create a firm and assign its admin email
+                    Create a firm and assign its admin lead
                   </h2>
                 </div>
                 <p className="max-w-xl text-sm leading-6 text-stone-500">
-                  Once you create the firm record here, that email can log in directly on
-                  the admin page and will be restricted to its own firm.
+                  Once the record is created, that admin can log in directly and will only
+                  see their own organisation.
                 </p>
               </div>
 
@@ -3507,10 +3595,10 @@ export function AssessmentShell() {
             </div>
           ) : orgs.length === 0 ? (
             <div className="rounded-[28px] border border-stone-200 bg-white p-12 text-center shadow-xl">
-              <p className="text-lg font-semibold text-stone-900">No organisations yet</p>
+              <p className="text-lg font-semibold text-stone-900">No organisations configured</p>
               <p className="mt-2 text-sm text-stone-500">
                 {isSuperAdmin
-                  ? "Use the onboarding form above to create the first firm admin and organisation."
+                  ? "Create the first firm record above to start benchmark tracking and report delivery."
                   : "Your organisation record has not been configured yet. Contact Elite Global AI."}
               </p>
             </div>
@@ -3543,13 +3631,13 @@ export function AssessmentShell() {
                         </div>
                         <p className="text-[14px] text-stone-500">Organisation key: {organisation.organisationKey}</p>
                         <p className="mt-2 text-[14px] text-stone-500">
-                          Readiness band: {getReadinessLabel(organisation.aggregatedScores.total)}
+                          Current readiness band: {getReadinessLabel(organisation.aggregatedScores.total)}
                         </p>
                       </div>
 
                       <div className="rounded-[24px] border border-stone-200 bg-stone-50 px-5 py-4 text-right">
                         <p className="mb-2 text-[9px] font-extrabold uppercase tracking-[0.2em] text-slate-400">
-                          Responses
+                          Captured Responses
                         </p>
                         <p className="font-serif text-[1.7rem] font-medium text-slate-950">
                           {organisation.submissionCount}
@@ -3627,7 +3715,7 @@ export function AssessmentShell() {
                         className="inline-flex items-center gap-2 rounded-full border border-stone-200 px-5 py-3 text-[15px] font-semibold text-stone-700 disabled:cursor-not-allowed disabled:opacity-70"
                       >
                         {busyKey === `save-${organisation.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                        Save Org Details
+                        Save Changes
                       </button>
                       <button
                         onClick={() => { void handlePreviewReport(organisation.id); }}
@@ -3635,7 +3723,7 @@ export function AssessmentShell() {
                         className="inline-flex items-center gap-2 rounded-full border border-stone-200 px-5 py-3 text-[15px] font-semibold text-stone-700 disabled:cursor-not-allowed disabled:opacity-70"
                       >
                         {busyKey === `preview-${organisation.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-                        View Latest Snapshot
+                        Preview Report
                       </button>
                       <button
                         onClick={() => { void handleSendReport(organisation.id); }}
@@ -3669,7 +3757,7 @@ export function AssessmentShell() {
                         {organisation.directorEmail || "No director email set yet"}
                       </span>
                       <span>Report sent: {formatReportDate(organisation.reportSentAt)}</span>
-                      <span>The live snapshot matches the respondent report view.</span>
+                      <span>The preview mirrors the respondent report view.</span>
                     </div>
                   </div>
                 );
@@ -3702,7 +3790,7 @@ export function AssessmentShell() {
                 E
               </div>
               <span className={`font-serif text-lg font-bold tracking-wide transition-opacity ${scrolled || !isLandingSurface ? "opacity-100" : "opacity-0 md:opacity-100"}`}>
-                ELITE GLOBAL AI <span className="font-normal text-stone-500">Assessment</span>
+                ELITE GLOBAL AI
               </span>
             </div>
             {renderTopNav()}
@@ -3733,13 +3821,12 @@ export function AssessmentShell() {
                   </div>
                   <div>
                     <p className="font-serif text-2xl font-bold text-white">Elite Global AI</p>
-                    <p className="text-sm text-slate-400">AI Readiness Assessment Platform</p>
+                    <p className="text-sm text-slate-400">The AI readiness operating system for African and emerging market enterprises.</p>
                   </div>
                 </div>
                 <p className="max-w-xl text-sm leading-7 text-slate-400">
-                  Benchmark-led AI readiness diagnostics for financial services,
-                  healthcare, consulting firms, and SMEs, with executive-grade reporting
-                  and clear commercial follow-through.
+                  Elite Global AI helps organisations measure AI capability, close workforce
+                  readiness gaps, and document measurable improvement for leadership.
                 </p>
                 <a
                   href={MARKETING_SITE_URL}
@@ -3747,26 +3834,33 @@ export function AssessmentShell() {
                   rel="noreferrer"
                   className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-4 py-2 text-sm font-semibold text-white"
                 >
-                  Visit Website
+                  Speak With Our Team
                   <ArrowRight className="h-4 w-4" />
                 </a>
               </div>
 
               <div className="space-y-4">
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.24em] text-slate-500">
-                  Navigate
+                  Explore
                 </p>
                 <div className="flex flex-col gap-3 text-sm">
-                  {primaryNavItems.map((item) => (
+                  {landingNavItems.map((item) => (
                     <button
-                      key={`footer-${item.key}`}
+                      key={`footer-${item.label}`}
                       type="button"
                       onClick={item.action}
                       className="text-left font-medium text-slate-200"
                     >
-                      {item.key === "dashboard" ? "Public Dashboard" : item.label}
+                      {item.label}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={openAssessmentEntry}
+                    className="text-left font-medium text-slate-200"
+                  >
+                    Take the Free Assessment
+                  </button>
                   <a href={MARKETING_SITE_URL} target="_blank" rel="noreferrer" className="font-medium text-slate-200">
                     eliteglobalai.com
                   </a>
@@ -3796,7 +3890,7 @@ export function AssessmentShell() {
 
             <div className="mt-10 flex flex-col gap-3 border-t border-slate-800 pt-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
               <p>© 2026 Elite Global AI. All rights reserved.</p>
-              <p>Benchmark-led diagnostics for AI capability, governance, and adoption.</p>
+              <p>Elite Global AI is a trading name of Elite Global Intelligence Technology Ltd, incorporated in Nigeria with operations in the United States.</p>
             </div>
           </div>
           <div className="pb-8 text-center text-xs text-slate-500">
