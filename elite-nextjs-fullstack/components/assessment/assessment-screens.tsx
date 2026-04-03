@@ -1,3 +1,4 @@
+import Image from "next/image";
 import React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -58,6 +59,23 @@ const secondaryButtonClasses =
   "inline-flex w-full items-center justify-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 sm:w-auto sm:px-5 sm:py-3";
 const chipClasses =
   "rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.16em] text-slate-500 sm:px-3 sm:text-[10px]";
+
+function AssessmentBrandIcon({ size, className = "" }: { size: number; className?: string }) {
+  return (
+    <div
+      className={`relative shrink-0 overflow-hidden rounded-[14px] bg-white shadow-sm ring-1 ring-blue-100 ${className}`}
+      style={{ width: size, height: size }}
+    >
+      <Image
+        src="/brand/elite-global-ai-icon.png"
+        alt="Elite Global AI icon"
+        fill
+        sizes={`${size}px`}
+        className="object-cover"
+      />
+    </div>
+  );
+}
 
 const staggerContainer = {
   hidden: { opacity: 0 },
@@ -581,7 +599,7 @@ export function AssessmentWelcomeScreen({
   return (
     <AssessmentModal
       eyebrow={isInviteFlow ? "Team Invite" : "Respondent"}
-      title="Start assessment"
+      title="Get Ready To Start The Assessment"
       description={isInviteFlow ? "Check your organisation details." : "Add your organisation."}
       onClose={onClose}
       widthClass="max-w-3xl"
@@ -736,23 +754,21 @@ export function AssessmentQuestionScreen({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -18 }}
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-      className="min-h-[100dvh] overflow-x-hidden bg-[#F9F8F4] px-2 py-2 text-slate-900 sm:px-3 sm:py-3 lg:h-screen lg:overflow-hidden lg:px-5"
+      className="min-h-[100dvh] overflow-x-hidden bg-[#F9F8F4] px-2 py-2 text-slate-900 sm:px-3 sm:py-3 lg:px-5 lg:py-4"
     >
-      <div className="mx-auto flex min-h-[calc(100dvh-1rem)] max-w-[min(96vw,1400px)] flex-col lg:h-full lg:min-h-0">
+      <div className="mx-auto flex w-full max-w-[min(96vw,1400px)] flex-col gap-3">
         <motion.header
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-          className="mb-2 rounded-[24px] border border-stone-200 bg-white px-3 py-3 shadow-sm sm:px-5"
+          className="rounded-[24px] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.94)_0%,rgba(239,246,255,0.86)_100%)] px-3 py-3 shadow-[0_1px_0_rgba(255,255,255,0.88),0_16px_34px_rgba(15,23,42,0.06)] backdrop-blur-[16px] sm:px-5"
         >
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-base font-serif font-bold text-white shadow-sm">
-                E
-              </div>
+              <AssessmentBrandIcon size={38} className="rounded-xl" />
               <div className="min-w-0">
-                <p className="font-serif text-[1rem] font-bold leading-tight text-slate-950 sm:text-[1.18rem] lg:text-[1.28rem]">
-                  Elite Global AI <span className="font-normal text-slate-500">Assessment</span>
+                <p className="text-[1rem] font-semibold leading-tight tracking-[-0.02em] text-slate-950 sm:text-[1.12rem] lg:text-[1.2rem]">
+                  Elite Global AI <span className="font-medium text-slate-500">Assessment</span>
                 </p>
               </div>
             </div>
@@ -772,7 +788,7 @@ export function AssessmentQuestionScreen({
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.04, duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-          className="mb-2 rounded-[22px] border border-stone-200 bg-white p-3 shadow-sm sm:p-4"
+          className="rounded-[22px] border border-stone-200 bg-white p-3 shadow-sm sm:p-4"
         >
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.7fr)] xl:items-center">
             <div>
@@ -785,7 +801,7 @@ export function AssessmentQuestionScreen({
               </p>
             </div>
 
-            <div className="rounded-[18px] border border-blue-100 bg-[linear-gradient(135deg,rgba(239,246,255,0.96)_0%,rgba(255,255,255,0.98)_100%)] p-3 sm:p-3.5">
+            <div className="rounded-[18px] border border-white/70 bg-[linear-gradient(135deg,rgba(244,248,255,0.94)_0%,rgba(232,242,255,0.86)_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_26px_rgba(37,99,235,0.08)] backdrop-blur-[14px] sm:p-3.5">
               <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
                 <span>Progress</span>
                 <span>{overallProgress}%</span>
@@ -810,9 +826,9 @@ export function AssessmentQuestionScreen({
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08, duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-          className="flex min-h-0 flex-1 flex-col rounded-[24px] border border-stone-200 bg-white p-3 shadow-sm sm:p-4"
+          className="rounded-[24px] border border-stone-200 bg-white px-4 py-4 shadow-sm sm:px-5 sm:py-5 lg:px-6 lg:py-5"
         >
-          <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="flex flex-col gap-4">
             <div>
               {progressCopy ? (
                 <AnimatePresence mode="wait">
@@ -829,19 +845,24 @@ export function AssessmentQuestionScreen({
                 </AnimatePresence>
               ) : null}
 
-              <h1 className="break-words font-serif text-[0.96rem] font-bold leading-[1.14] tracking-[-0.01em] text-slate-950 sm:text-[1.06rem] md:text-[1.14rem] lg:text-[1.18rem] xl:text-[1.24rem]">
+              <h1
+                className="w-full break-words text-[1.24rem] font-bold leading-[1.12] tracking-[-0.03em] text-[#22324d] sm:text-[1.4rem] md:text-[1.56rem] lg:text-[1.72rem]"
+                style={{ textWrap: "pretty" }}
+              >
                 {question.text}
               </h1>
-              <p className="mt-2 text-[11px] font-medium leading-5 text-slate-700 sm:text-[12px]">{instruction}</p>
+              <p className="mt-3 max-w-none text-[0.92rem] font-medium leading-6 text-[#5b6980] sm:text-[0.95rem]">
+                {instruction}
+              </p>
             </div>
 
             <motion.div
               variants={staggerContainer}
               initial="hidden"
               animate="visible"
-              className="min-h-0 flex-1 overflow-y-auto pr-0 sm:pr-1"
+              className="overflow-visible"
             >
-              <div className="grid gap-2.5 xl:grid-cols-2">
+              <div className="grid gap-3 lg:grid-cols-2">
                 {question.options.map((option, index) => {
                   const selected = question.multiSelect
                     ? Array.isArray(currentAnswer) && currentAnswer.includes(option.value)
@@ -854,27 +875,29 @@ export function AssessmentQuestionScreen({
                       type="button"
                       onClick={() => onSelect(option.value)}
                       variants={fadeUpItem}
-                      whileHover={{ y: -2 }}
+                      whileHover={{ y: -3 }}
                       whileTap={{ scale: 0.995 }}
-                      className={`w-full rounded-[18px] border px-3 py-3 text-left transition-all sm:px-4 ${
+                      className={`w-full rounded-[22px] border px-4 py-4 text-left transition-all duration-200 sm:min-h-[112px] sm:px-5 sm:py-4 ${
                         selected
-                          ? "border-blue-500 bg-blue-50 shadow-[0_10px_24px_rgba(37,99,235,0.12)]"
-                          : "border-stone-200 bg-white hover:border-blue-200 hover:bg-blue-50/35"
+                          ? "border-blue-200 bg-white ring-1 ring-blue-100 shadow-[0_1px_0_rgba(255,255,255,0.92),0_18px_34px_rgba(37,99,235,0.08),0_0_24px_rgba(191,219,254,0.34)]"
+                          : "border-stone-200 bg-white shadow-[0_1px_0_rgba(255,255,255,0.9),0_8px_18px_rgba(15,23,42,0.04)] hover:border-blue-200 hover:bg-white hover:shadow-[0_1px_0_rgba(255,255,255,0.92),0_14px_28px_rgba(15,23,42,0.07)]"
                       }`}
                     >
-                      <div className="flex items-start gap-2 sm:gap-2.5">
-                        <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[10px] font-extrabold sm:h-8 sm:w-8 sm:text-[11px] ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-stone-50 text-slate-500"}`}>
-                          {marker}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
-                            <p className="text-[11.5px] font-bold leading-[1.4] text-slate-900 sm:text-[12.5px] md:text-[13px]">
+                      <div className="flex h-full flex-col gap-3">
+                        <div className="flex items-start gap-3">
+                          <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[13px] font-semibold tracking-[-0.02em] ${selected ? "border-blue-500 bg-blue-500 text-white" : "border-stone-200 bg-white text-[#607089]"}`}>
+                            {marker}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[0.93rem] font-semibold leading-[1.4] tracking-[-0.02em] text-[#263754] sm:text-[0.96rem] lg:text-[0.98rem]">
                               {option.label}
                             </p>
-                            <span className={`inline-flex min-w-[74px] self-start items-center justify-center rounded-full border px-2.5 py-0.5 text-[7px] font-extrabold uppercase tracking-[0.14em] sm:text-[8px] xl:self-auto ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-stone-200 bg-white text-slate-400"}`}>
-                              {selected ? "Selected" : question.multiSelect ? "Add" : "Select"}
-                            </span>
                           </div>
+                        </div>
+                        <div className="mt-auto flex items-center justify-end">
+                          <span className={`inline-flex min-w-[86px] items-center justify-center rounded-full border px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.18em] ${selected ? "border-blue-500 bg-blue-500 text-white" : "border-stone-200 bg-white text-[#7a879b]"}`}>
+                            {selected ? "Selected" : question.multiSelect ? "Add" : "Select"}
+                          </span>
                         </div>
                       </div>
                     </motion.button>
@@ -890,7 +913,7 @@ export function AssessmentQuestionScreen({
             </div>
           ) : null}
 
-          <div className="mt-3 grid gap-3 border-t border-stone-200 pt-3 sm:flex sm:items-center sm:justify-between">
+          <div className="mt-4 grid gap-3 border-t border-stone-200 pt-4 sm:flex sm:items-center sm:justify-between">
             <button type="button" onClick={onBack} className={secondaryButtonClasses}>
               <ChevronLeft className="h-4 w-4" />
               Back

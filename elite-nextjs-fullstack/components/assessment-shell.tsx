@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -190,6 +191,21 @@ const AuthorCard = ({ name, role, delay }: { name: string; role: string; delay: 
     <p className="text-center text-xs font-bold uppercase tracking-widest text-stone-500">
       {role}
     </p>
+  </div>
+);
+
+const BrandIcon = ({ size, className = "" }: { size: number; className?: string }) => (
+  <div
+    className={`relative shrink-0 overflow-hidden rounded-[14px] bg-white/90 shadow-sm ring-1 ring-black/5 ${className}`}
+    style={{ width: size, height: size }}
+  >
+    <Image
+      src="/brand/elite-global-ai-icon.png"
+      alt="Elite Global AI icon"
+      fill
+      sizes={`${size}px`}
+      className="object-cover"
+    />
   </div>
 );
 
@@ -3786,9 +3802,7 @@ export function AssessmentShell() {
         <nav className={`fixed left-0 right-0 top-0 z-50 transition-all duration-300 ${scrolled ? "bg-[#F9F8F4]/90 py-4 shadow-sm backdrop-blur-md" : "bg-transparent py-6"}`}>
           <div className="container mx-auto flex items-center justify-between px-4 sm:px-6">
             <div className="flex cursor-pointer items-center gap-4" onClick={() => navigate("/")}>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-nobel-gold pb-1 text-xl font-serif font-bold text-white shadow-sm">
-                E
-              </div>
+              <BrandIcon size={34} className="rounded-xl" />
               <span className={`font-serif text-lg font-bold tracking-wide transition-opacity ${scrolled || !isLandingSurface ? "opacity-100" : "opacity-0 md:opacity-100"}`}>
                 ELITE GLOBAL AI
               </span>
@@ -3816,9 +3830,7 @@ export function AssessmentShell() {
             <div className="grid gap-10 lg:grid-cols-[1.2fr_0.75fr_0.95fr]">
               <div className="space-y-5">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-xl font-serif font-bold text-white shadow-sm">
-                    E
-                  </div>
+                  <BrandIcon size={44} />
                   <div>
                     <p className="font-serif text-2xl font-bold text-white">Elite Global AI</p>
                     <p className="text-sm text-slate-400">The AI readiness operating system for African and emerging market enterprises.</p>
