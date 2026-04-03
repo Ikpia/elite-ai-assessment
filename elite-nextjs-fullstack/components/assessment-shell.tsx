@@ -3940,13 +3940,7 @@ export function AssessmentShell() {
               <p>Elite Global AI is a trading name of Elite Global Intelligence Technology Ltd, incorporated in Nigeria with operations in the United States.</p>
             </div>
           </div>
-          <div className="pb-8 text-center text-xs text-slate-500">
-            {backendStatus === "connected"
-              ? `Connected to ${backendService || "elite-global-ai-backend"} via ${apiHealthUrl} in ${backendEnvironment}.`
-              : backendStatus === "checking"
-                ? "Checking backend connectivity through the configured API origin."
-                : "Backend health check is not currently reachable from this frontend."}
-          </div>
+          
         </footer>
       ) : null}
     </div>
